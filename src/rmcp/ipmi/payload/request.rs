@@ -5,8 +5,7 @@ use crate::{
 
 use super::{
     bmc::{SlaveAddress, SoftwareType},
-    lun::Lun,
-    netfn::{NetFn, NetfnLun, RqseqLun},
+    netfn_lun::{Lun, NetFn, NetfnLun, RqseqLun},
     response::Address,
 };
 
@@ -92,9 +91,9 @@ impl ReqPayload {
     pub fn new(net_fn: NetFn, command: CommandType, data: Option<Vec<u8>>) -> ReqPayload {
         ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
-            netfn_rslun: NetfnLun::new(net_fn.into(), Lun::Bmc.into()),
+            netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
-            rqseq_rqlun: RqseqLun::new(0x08, Lun::Bmc.into()),
+            rqseq_rqlun: RqseqLun::new(0x08, Lun::Bmc),
             command,
             data,
         }
@@ -105,9 +104,9 @@ impl Default for ReqPayload {
     fn default() -> Self {
         Self {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
-            netfn_rslun: NetfnLun::new(NetFn::App.into(), Lun::Bmc.into()),
+            netfn_rslun: NetfnLun::new(NetFn::App, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
-            rqseq_rqlun: RqseqLun::new(0x00, Lun::Bmc.into()),
+            rqseq_rqlun: RqseqLun::new(0x00, Lun::Bmc),
             command: CommandType::GetChannelAuthCapabilities,
             data: None,
         }

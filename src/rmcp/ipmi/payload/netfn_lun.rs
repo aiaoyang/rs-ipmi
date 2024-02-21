@@ -2,8 +2,6 @@ use std::fmt;
 
 use crate::err::LunError;
 
-use super::lun::Lun;
-
 pub type RqseqLun = NetfnLun;
 impl RqseqLun {
     pub fn rqseq(&self) -> u8 {
@@ -28,15 +26,15 @@ impl From<u8> for NetfnLun {
 
 impl NetfnLun {
     const IPMB_LUN_MASK: u8 = 0x03;
-    pub fn new(netfn: u8, lun: u8) -> Self {
-        Self(netfn << 2 | lun & Self::IPMB_LUN_MASK)
+    pub fn new(netfn: impl Into<u8>, lun: Lun) -> Self {
+        Self(netfn.into() << 2 | lun as u8 & Self::IPMB_LUN_MASK)
     }
 
     pub fn netfn(&self) -> NetFn {
         (self.0 >> 2).into()
     }
     pub fn lun(&self) -> Result<Lun, LunError> {
-        (self.0 & Self::IPMB_LUN_MASK).try_into()
+        Lun::new(self.0 & Self::IPMB_LUN_MASK)
     }
 }
 
@@ -97,6 +95,26 @@ impl From<NetFn> for u8 {
             NetFn::Transport => 0x0C,
             NetFn::Reserved => 0x0E,
             NetFn::Unknown(fn_code) => fn_code,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum Lun {
+    Bmc,
+    Oem1,
+    Sms,
+    Oem2,
+}
+
+impl Lun {
+    pub fn new(value: u8) -> Result<Self, LunError> {
+        match value {
+            0b00 => Ok(Lun::Bmc),
+            0b01 => Ok(Lun::Oem1),
+            0b10 => Ok(Lun::Sms),
+            0b11 => Ok(Lun::Oem2),
+            _ => Err(LunError::UnknownLun(value)),
         }
     }
 }

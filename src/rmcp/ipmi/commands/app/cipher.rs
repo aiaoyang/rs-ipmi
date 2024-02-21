@@ -1,5 +1,5 @@
 use crate::err::IpmiPayloadError;
-use crate::rmcp::netfn::NetFn;
+use crate::rmcp::netfn_lun::NetFn;
 use crate::rmcp::request::ReqPayload;
 use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
 use crate::CommandType;

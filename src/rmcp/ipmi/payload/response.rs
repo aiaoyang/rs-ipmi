@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     bmc::{AddrType, SlaveAddress, SoftwareType},
-    netfn::{NetfnLun, RqseqLun},
+    netfn_lun::{NetfnLun, RqseqLun},
 };
 
 #[derive(Clone, Debug)]

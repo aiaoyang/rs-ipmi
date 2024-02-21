@@ -1,13 +1,5 @@
 use core::fmt;
 
-use crate::rmcp::netfn::NetfnLun;
-
-pub trait IpmiCommand: std::fmt::Display + for<'a> TryFrom<&'a [u8]> + Into<Vec<u8>> {
-    fn name(&self) -> &str;
-    fn code(&self) -> u8;
-    fn netfn_rslun(&self) -> NetfnLun;
-}
-
 // pub const GET_CHANNEL_AUTH_CAPABILITIES: u8 = 0x38;
 #[derive(Clone, Copy, Debug)]
 pub enum CommandType {

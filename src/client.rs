@@ -14,7 +14,7 @@ use crate::{
     },
     rmcp::{
         crypto::hash_hmac_sha_256,
-        netfn::NetFn,
+        netfn_lun::NetFn,
         open_session::{
             AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm, RMCPPlusOpenSession,
             RMCPPlusOpenSessionRequest, StatusCode,

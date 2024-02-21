@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use crate::{
     err::{IpmiPayloadError, ParseError, PrivilegeError},
     rmcp::{
-        netfn::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
+        netfn_lun::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
     },
     u8_ms_bit, CommandType,
 };
@@ -125,14 +125,6 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
         })
     }
 }
-
-// impl TryFrom<&Vec<u8>> for GetChannelAuthCapabilitiesResponse {
-//     type Error = IpmiPayloadError;
-
-//     fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
-//         value.as_slice().try_into()
-//     }
-// }
 
 #[derive(Debug)]
 

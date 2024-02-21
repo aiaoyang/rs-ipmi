@@ -1,4 +1,4 @@
-use crate::rmcp::lun::Lun;
+use crate::rmcp::Lun;
 
 use super::constant::{SENSOR_GENERIC_EVENT_DESC, SENSOR_SPECIFIC_EVENT_DESC};
 
@@ -107,7 +107,7 @@ impl From<(u8, u8)> for EventGenerator {
                 channel_number,
             }
         } else {
-            let lun = (value.1 & 0x3).try_into().unwrap();
+            let lun = Lun::new(value.1 & 0x3).unwrap();
 
             Self::RqSAAndLun {
                 i2c_addr: i2c_or_sid,
