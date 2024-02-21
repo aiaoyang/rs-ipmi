@@ -47,40 +47,28 @@ impl TryFrom<&[u8]> for IpmiV1Header {
     }
 }
 
-impl Into<Vec<u8>> for IpmiV1Header {
-    fn into(self) -> Vec<u8> {
-        let seq_be = self.session_seq_number.to_be_bytes();
-        let ses_be = self.session_id.to_be_bytes();
+impl From<IpmiV1Header> for Vec<u8> {
+    fn from(val: IpmiV1Header) -> Self {
+        let seq_be = val.session_seq_number.to_be_bytes();
+        let ses_be = val.session_id.to_be_bytes();
         let mut result: Vec<u8> = Vec::new();
-        result.push(self.auth_type.into());
+        result.push(val.auth_type.into());
         result.extend(seq_be);
         result.extend(ses_be);
-        match self.auth_type {
+        match val.auth_type {
             AuthType::None => {
-                result.push(self.payload_length);
+                result.push(val.payload_length);
                 result
             }
             _ => {
-                let auth_be = self.auth_code.unwrap().to_be_bytes();
+                let auth_be = val.auth_code.unwrap().to_be_bytes();
                 result.extend(auth_be);
-                result.push(self.payload_length);
+                result.push(val.payload_length);
                 result
             }
         }
     }
 }
-
-// impl IpmiV1Header {
-//     pub fn new(auth_type: AuthType, session_seq_number: u32, session_id: u32) -> IpmiV1Header {
-//         IpmiV1Header {
-//             auth_type,
-//             session_seq_number,
-//             session_id,
-//             auth_code: None,
-//             payload_length: 0,
-//         }
-//     }
-// }
 
 impl Default for IpmiV1Header {
     fn default() -> Self {

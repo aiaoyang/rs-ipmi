@@ -13,7 +13,6 @@
 //! ```no_run
 //! use rust_ipmi::{IPMIClient, NetFn};
 //!
-//! fn main() {
 //!     // create the client for the server you want to execute IPMI commands against
 //!     let mut client: IPMIClient =
 //!         IPMIClient::new("192.168.88.10:623").expect("Failed to create ipmi client");
@@ -30,7 +29,6 @@
 //!         Err(err) => println!("Failed to send the raw request; err = {:?}", err),
 //!         Ok(n) => println!("{}", n), // print the response
 //!     }
-//! }
 //!
 //! ```
 mod commands;
@@ -42,5 +40,6 @@ mod parser;
 pub use commands::Command;
 pub use err::IPMIClientError;
 pub use ipmi_client::IPMIClient;
-pub use parser::ipmi_payload::NetFn;
-pub use parser::ipmi_payload_response::CompletionCode;
+pub use parser::response::CompletionCode;
+pub use parser::Entry;
+pub use parser::NetFn;

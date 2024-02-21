@@ -4,23 +4,21 @@ use crate::{
     parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
-use bitvec::prelude::*;
-
 use super::rmcp_open_session::StatusCode;
 
 #[derive(Clone, Debug)]
-pub enum RAKP {
+pub enum Rakp {
     Message1(RAKPMessage1),
     Message2(RAKPMessage2),
     Message3(RAKPMessage3),
     Message4(RAKPMessage4),
 }
 
-impl Into<Vec<u8>> for RAKP {
-    fn into(self) -> Vec<u8> {
-        match self {
-            RAKP::Message1(payload) => payload.into(),
-            RAKP::Message3(payload) => payload.into(),
+impl From<Rakp> for Vec<u8> {
+    fn from(val: Rakp) -> Self {
+        match val {
+            Rakp::Message1(payload) => payload.into(),
+            Rakp::Message3(payload) => payload.into(),
             _ => todo!(),
         }
     }
@@ -37,29 +35,29 @@ pub struct RAKPMessage1 {
     pub username: String,
 }
 
-impl Into<Vec<u8>> for RAKPMessage1 {
-    fn into(self) -> Vec<u8> {
+impl From<RAKPMessage1> for Vec<u8> {
+    fn from(val: RAKPMessage1) -> Self {
         let mut result = Vec::new();
-        result.push(self.message_tag);
+        result.push(val.message_tag);
         result.extend([0x0, 0x0, 0x0]);
-        result.extend(u32::to_le_bytes(self.managed_system_session_id));
-        result.extend(u128::to_le_bytes(self.remote_console_random_number));
+        result.extend(u32::to_le_bytes(val.managed_system_session_id));
+        result.extend(u128::to_le_bytes(val.remote_console_random_number));
         result.push({
-            let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            *bv.get_mut(3).unwrap() = self.inherit_role;
-            bv[4..].store::<u8>(self.requested_max_privilege.into());
-            let max_priv = bv[..].load::<u8>();
-            max_priv
+            ((val.inherit_role as u8) << 4) | (u8::from(val.requested_max_privilege) << 4 >> 4)
+            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
+            // *bv.get_mut(3).unwrap() = val.inherit_role;
+            // bv[4..].store::<u8>(val.requested_max_privilege.into());
+            // bv[..].load::<u8>()
         });
         result.extend([0x0, 0x0]);
-        result.push(self.username_length);
-        result.extend(self.username.into_bytes());
+        result.push(val.username_length);
+        result.extend(val.username.into_bytes());
         result
     }
 }
 
-impl Into<Packet> for RAKPMessage1 {
-    fn into(self) -> Packet {
+impl From<RAKPMessage1> for Packet {
+    fn from(val: RAKPMessage1) -> Self {
         Packet::new(
             IpmiHeader::V2_0(IpmiV2Header::new(
                 AuthType::RmcpPlus,
@@ -68,9 +66,9 @@ impl Into<Packet> for RAKPMessage1 {
                 PayloadType::RAKP1,
                 0x0,
                 0x0,
-                (self.username_length + 28).try_into().unwrap(),
+                (val.username_length + 28).into(),
             )),
-            Payload::RAKP(RAKP::Message1(self.clone())),
+            Payload::Rakp(Rakp::Message1(val.clone())),
         )
     }
 }
@@ -147,22 +145,22 @@ pub struct RAKPMessage3 {
     pub key_exchange_auth_code: Option<Vec<u8>>,
 }
 
-impl Into<Vec<u8>> for RAKPMessage3 {
-    fn into(self) -> Vec<u8> {
+impl From<RAKPMessage3> for Vec<u8> {
+    fn from(val: RAKPMessage3) -> Self {
         let mut result = Vec::new();
-        result.push(self.message_tag);
-        result.push(self.rmcp_plus_status_code.into());
+        result.push(val.message_tag);
+        result.push(val.rmcp_plus_status_code.into());
         result.extend([0x0, 0x0]);
-        result.extend(u32::to_le_bytes(self.managed_system_session_id));
-        if let Some(auth_code) = &self.key_exchange_auth_code {
+        result.extend(u32::to_le_bytes(val.managed_system_session_id));
+        if let Some(auth_code) = &val.key_exchange_auth_code {
             result.append(&mut auth_code.clone());
         }
         result
     }
 }
 
-impl Into<Packet> for RAKPMessage3 {
-    fn into(self) -> Packet {
+impl From<RAKPMessage3> for Packet {
+    fn from(val: RAKPMessage3) -> Self {
         Packet::new(
             IpmiHeader::V2_0(IpmiV2Header::new(
                 AuthType::RmcpPlus,
@@ -172,13 +170,13 @@ impl Into<Packet> for RAKPMessage3 {
                 0x0,
                 0x0,
                 {
-                    match &self.key_exchange_auth_code {
-                        None => 8 as u16,
+                    match &val.key_exchange_auth_code {
+                        None => 8_u16,
                         Some(auth_code) => (auth_code.len() + 8) as u16,
                     }
                 },
             )),
-            Payload::RAKP(RAKP::Message3(self.clone())),
+            Payload::Rakp(Rakp::Message3(val.clone())),
         )
     }
 }

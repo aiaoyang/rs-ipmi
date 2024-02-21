@@ -1,12 +1,14 @@
 use crate::{
     err::PacketError,
     helpers::utils::{aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256},
-    parser::{ipmi_payload::IpmiPayload, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
+    parser::{IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
 };
 
-use super::{rakp::RAKP, rmcp_open_session::RMCPPlusOpenSession};
+use super::{
+    rakp::Rakp, request::ReqPayload, response::RespPayload, rmcp_open_session::RMCPPlusOpenSession,
+};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Packet {
     pub rmcp_header: RmcpHeader,
     pub ipmi_header: IpmiHeader,
@@ -22,11 +24,9 @@ impl TryFrom<&[u8]> for Packet {
         }
         let ipmi_header_len = IpmiHeader::header_len(value[4], value[5])?;
         let ipmi_header: IpmiHeader = value[4..(ipmi_header_len + 4)].try_into()?;
-        // let ipmi_header = IpmiHeader::from_slice(&value[4..(ipmi_header_len + 4)]);
         let payload_length = ipmi_header.payload_len();
         let mut payload_vec = Vec::new();
         payload_vec.extend_from_slice(&value[(nbytes - payload_length)..nbytes]);
-        // println!("Payload vec: {:x?}", payload_vec);
         Ok(Packet {
             rmcp_header: value[..4].try_into()?,
             ipmi_header,
@@ -34,25 +34,19 @@ impl TryFrom<&[u8]> for Packet {
                 match payload_length {
                     0 => None,
                     _ => match ipmi_header.payload_type() {
-                        PayloadType::IPMI => {
-                            Some(Payload::Ipmi(payload_vec.as_slice().try_into()?))
+                        PayloadType::Ipmi => {
+                            Some(Payload::IpmiResp(payload_vec.as_slice().try_into()?))
                         }
-                        PayloadType::RcmpOpenSessionRequest => todo!(),
-                        PayloadType::RcmpOpenSessionResponse => {
-                            Some(Payload::RMCP(RMCPPlusOpenSession::Response(
-                                // RMCPPlusOpenSessionResponse::from_slice(
-                                payload_vec.as_slice().try_into()?, // ),
-                            )))
-                        }
-                        PayloadType::RAKP2 => Some(Payload::RAKP(RAKP::Message2(
-                            // RAKPMessage2::from_slice(
-                            payload_vec.as_slice().try_into()?, // ),
+                        PayloadType::RcmpOpenSessionResponse => Some(Payload::Rmcp(
+                            RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
+                        )),
+                        PayloadType::RAKP2 => Some(Payload::Rakp(Rakp::Message2(
+                            payload_vec.as_slice().try_into()?,
                         ))),
-                        PayloadType::RAKP4 => Some(Payload::RAKP(RAKP::Message4(
-                            // RAKPMessage4::from_slice(
-                            payload_vec.as_slice().try_into()?, // ),
+                        PayloadType::RAKP4 => Some(Payload::Rakp(Rakp::Message4(
+                            payload_vec.as_slice().try_into()?,
                         ))),
-                        _ => todo!(),
+                        _ => unreachable!(),
                     },
                 }
             },
@@ -60,6 +54,7 @@ impl TryFrom<&[u8]> for Packet {
     }
 }
 
+// k2 req
 impl TryFrom<(&[u8], &[u8; 32])> for Packet {
     type Error = PacketError;
 
@@ -96,23 +91,18 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
                 match payload_length {
                     0 => None,
                     _ => match ipmi_header.payload_type() {
-                        PayloadType::IPMI => {
-                            Some(Payload::Ipmi(payload_vec.as_slice().try_into()?))
-                        }
+                        PayloadType::Ipmi => Some(Payload::IpmiResp(RespPayload::try_from(
+                            payload_vec.as_slice(),
+                        )?)),
                         PayloadType::RcmpOpenSessionRequest => todo!(),
-                        PayloadType::RcmpOpenSessionResponse => {
-                            Some(Payload::RMCP(RMCPPlusOpenSession::Response(
-                                // RMCPPlusOpenSessionResponse::from_slice(
-                                payload_vec.as_slice().try_into()?, // ),
-                            )))
-                        }
-                        PayloadType::RAKP2 => Some(Payload::RAKP(RAKP::Message2(
-                            // RAKPMessage2::from_slice(
-                            payload_vec.as_slice().try_into()?, // ),
+                        PayloadType::RcmpOpenSessionResponse => Some(Payload::Rmcp(
+                            RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
+                        )),
+                        PayloadType::RAKP2 => Some(Payload::Rakp(Rakp::Message2(
+                            payload_vec.as_slice().try_into()?,
                         ))),
-                        PayloadType::RAKP4 => Some(Payload::RAKP(RAKP::Message4(
-                            // RAKPMessage4::from_slice(
-                            payload_vec.as_slice().try_into()?, // ),
+                        PayloadType::RAKP4 => Some(Payload::Rakp(Rakp::Message4(
+                            payload_vec.as_slice().try_into()?,
                         ))),
                         _ => todo!(),
                     },
@@ -122,12 +112,12 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
     }
 }
 
-impl Into<Vec<u8>> for Packet {
-    fn into(self) -> Vec<u8> {
+impl From<Packet> for Vec<u8> {
+    fn from(val: Packet) -> Self {
         let mut result = Vec::new();
-        result.append(&mut self.rmcp_header.into());
-        result.append(&mut self.ipmi_header.clone().into());
-        match &self.payload {
+        result.append(&mut val.rmcp_header.into());
+        result.append(&mut val.ipmi_header.into());
+        match &val.payload {
             None => {}
             Some(a) => result.append(&mut a.clone().into()),
         }
@@ -151,7 +141,7 @@ impl Packet {
             auth_code_input.extend(&iv);
             // println!("{:x?}", self.payload.clone().unwrap());
             let mut encrypted_payload = aes_128_cbc_encrypt(
-                k2.clone()[..16].try_into().unwrap(), // aes 128 cbc wants the first 128 bits of k2 as the key
+                (*k2)[..16].try_into().unwrap(), // aes 128 cbc wants the first 128 bits of k2 as the key
                 iv,
                 self.payload.clone().unwrap().into(),
             );
@@ -159,9 +149,7 @@ impl Packet {
 
             // integrity padding
             let padding_needed = 4 - ((auth_code_input.len() + 2) % 4);
-            for _ in 0..padding_needed {
-                auth_code_input.push(0xff);
-            }
+            auth_code_input.extend(vec![0xff; padding_needed]);
             auth_code_input.push(padding_needed.try_into().unwrap());
             /*
             **Next Header**. Reserved in IPMI v2.0. Set
@@ -177,7 +165,7 @@ impl Packet {
             encrypted_packet.extend(&auth_code[..16]);
             Some(encrypted_packet)
         } else {
-            return None;
+            None
         }
     }
 }
@@ -191,19 +179,21 @@ impl Default for Packet {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Payload {
-    Ipmi(IpmiPayload),
-    RMCP(RMCPPlusOpenSession),
-    RAKP(RAKP),
+    IpmiResp(RespPayload),
+    IpmiReq(ReqPayload),
+    Rmcp(RMCPPlusOpenSession),
+    Rakp(Rakp),
 }
 
-impl Into<Vec<u8>> for Payload {
-    fn into(self) -> Vec<u8> {
-        match self {
-            Payload::Ipmi(payload) => payload.into(),
-            Payload::RMCP(payload) => payload.into(),
-            Payload::RAKP(payload) => payload.into(),
+impl From<Payload> for Vec<u8> {
+    fn from(val: Payload) -> Self {
+        match val {
+            Payload::Rmcp(payload) => payload.into(),
+            Payload::Rakp(payload) => payload.into(),
+            Payload::IpmiResp(_) => unreachable!(),
+            Payload::IpmiReq(payload) => payload.into(),
         }
     }
 }

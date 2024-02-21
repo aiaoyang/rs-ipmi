@@ -7,16 +7,16 @@ use crate::{
     parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 
 pub enum RMCPPlusOpenSession {
     Request(RMCPPlusOpenSessionRequest),
     Response(RMCPPlusOpenSessionResponse),
 }
 
-impl Into<Vec<u8>> for RMCPPlusOpenSession {
-    fn into(self) -> Vec<u8> {
-        match self {
+impl From<RMCPPlusOpenSession> for Vec<u8> {
+    fn from(val: RMCPPlusOpenSession) -> Self {
+        match val {
             RMCPPlusOpenSession::Request(request) => request.clone().into(),
             _ => todo!(),
         }
@@ -110,34 +110,34 @@ pub struct RMCPPlusOpenSessionRequest {
     pub confidentiality_algorithm: ConfidentialityAlgorithm,
 }
 
-impl Into<Vec<u8>> for RMCPPlusOpenSessionRequest {
-    fn into(self) -> Vec<u8> {
+impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
+    fn from(val: RMCPPlusOpenSessionRequest) -> Self {
         let mut result = Vec::new();
-        result.push(self.message_tag);
-        result.push(self.max_privilege.into());
+        result.push(val.message_tag);
+        result.push(val.max_privilege.into());
         result.extend([0x0, 0x0]); // reserved bytes
-        result.extend(u32::to_le_bytes(self.remote_console_session_id)); // remote console session id
+        result.extend(u32::to_le_bytes(val.remote_console_session_id)); // remote console session id
         result.push(0x0); // auth payload type
         result.extend([0x0, 0x0]); // reserved bytes
         result.push(0x08); // auth payload len
-        result.push(self.authentication_algorithm.into()); // Authentication Algorithm
+        result.push(val.authentication_algorithm.into()); // Authentication Algorithm
         result.extend([0x0, 0x0, 0x0]); // reserved bytes
         result.push(0x01); // integrity payload type
         result.extend([0x0, 0x0]); // reserved bytes
         result.push(0x08); // integrity payload len
-        result.push(self.integrity_algorithm.into()); // integrity Algorithm
+        result.push(val.integrity_algorithm.into()); // integrity Algorithm
         result.extend([0x0, 0x0, 0x0]); // reserved bytes
         result.push(0x02); // confidentiality payload type
         result.extend([0x0, 0x0]); // reserved bytes
         result.push(0x08); // confidentiality payload len
-        result.push(self.confidentiality_algorithm.into()); // confidentiality Algorithm
+        result.push(val.confidentiality_algorithm.into()); // confidentiality Algorithm
         result.extend([0x0, 0x0, 0x0]); // reserved bytes
         result
     }
 }
 
-impl Into<Packet> for RMCPPlusOpenSessionRequest {
-    fn into(self) -> Packet {
+impl From<RMCPPlusOpenSessionRequest> for Packet {
+    fn from(val: RMCPPlusOpenSessionRequest) -> Self {
         Packet::new(
             IpmiHeader::V2_0(IpmiV2Header::new(
                 AuthType::RmcpPlus,
@@ -148,7 +148,7 @@ impl Into<Packet> for RMCPPlusOpenSessionRequest {
                 0,
                 32,
             )),
-            Payload::RMCP(RMCPPlusOpenSession::Request(self.clone())),
+            Payload::Rmcp(RMCPPlusOpenSession::Request(val.clone())),
         )
     }
 }
@@ -173,7 +173,7 @@ impl RMCPPlusOpenSessionRequest {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RMCPPlusOpenSessionResponse {
     /*
     1 Message Tag - The BMC returns the Message Tag value that was passed by the remote
@@ -249,7 +249,7 @@ impl TryFrom<&[u8]> for RMCPPlusOpenSessionResponse {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 
 pub enum StatusCode {
     NoErrors,
@@ -301,9 +301,9 @@ impl From<u8> for StatusCode {
     }
 }
 
-impl Into<u8> for StatusCode {
-    fn into(self) -> u8 {
-        match self {
+impl From<StatusCode> for u8 {
+    fn from(val: StatusCode) -> Self {
+        match val {
             StatusCode::NoErrors => 0x0,
             StatusCode::InsufficientResources => 0x01,
             StatusCode::InvalidSessionId => 0x02,
@@ -335,7 +335,7 @@ pub enum AuthAlgorithm {
     RakpHmacSha1,
     RakpHmacMd5,
     RakpHmacSha256,
-    OEM(u8),
+    Oem(u8),
     // Reserved(u8),
 }
 
@@ -348,20 +348,20 @@ impl TryFrom<u8> for AuthAlgorithm {
             0x1 => Ok(AuthAlgorithm::RakpHmacSha1),
             0x2 => Ok(AuthAlgorithm::RakpHmacMd5),
             0x3 => Ok(AuthAlgorithm::RakpHmacSha256),
-            0xC0..=0xFF => Ok(AuthAlgorithm::OEM(value)),
+            0xC0..=0xFF => Ok(AuthAlgorithm::Oem(value)),
             _ => Err(AuthAlgorithmError::UnknownAuthAlgorithm(value))?,
         }
     }
 }
 
-impl Into<u8> for AuthAlgorithm {
-    fn into(self) -> u8 {
-        match self {
+impl From<AuthAlgorithm> for u8 {
+    fn from(val: AuthAlgorithm) -> Self {
+        match val {
             AuthAlgorithm::RakpNone => 0x00,
             AuthAlgorithm::RakpHmacSha1 => 0x01,
             AuthAlgorithm::RakpHmacMd5 => 0x02,
             AuthAlgorithm::RakpHmacSha256 => 0x03,
-            AuthAlgorithm::OEM(value) => value,
+            AuthAlgorithm::Oem(value) => value,
         }
     }
 }
@@ -373,7 +373,7 @@ pub enum IntegrityAlgorithm {
     HmacMd5128,
     Md5128,
     HmacSha256128,
-    OEM(u8),
+    Oem(u8),
 }
 
 impl TryFrom<u8> for IntegrityAlgorithm {
@@ -386,21 +386,21 @@ impl TryFrom<u8> for IntegrityAlgorithm {
             0x2 => Ok(IntegrityAlgorithm::HmacMd5128),
             0x3 => Ok(IntegrityAlgorithm::Md5128),
             0x4 => Ok(IntegrityAlgorithm::HmacSha256128),
-            0xC0..=0xFF => Ok(IntegrityAlgorithm::OEM(value)),
+            0xC0..=0xFF => Ok(IntegrityAlgorithm::Oem(value)),
             _ => Err(IntegrityAlgorithmError::UnknownIntegrityAlgorithm(value))?,
         }
     }
 }
 
-impl Into<u8> for IntegrityAlgorithm {
-    fn into(self) -> u8 {
-        match self {
+impl From<IntegrityAlgorithm> for u8 {
+    fn from(val: IntegrityAlgorithm) -> Self {
+        match val {
             IntegrityAlgorithm::None => 0x00,
             IntegrityAlgorithm::HmacSha196 => 0x01,
             IntegrityAlgorithm::HmacMd5128 => 0x02,
             IntegrityAlgorithm::Md5128 => 0x03,
             IntegrityAlgorithm::HmacSha256128 => 0x04,
-            IntegrityAlgorithm::OEM(value) => value,
+            IntegrityAlgorithm::Oem(value) => value,
         }
     }
 }
@@ -411,7 +411,7 @@ pub enum ConfidentialityAlgorithm {
     AesCbc128,
     XRc4128,
     XRc440,
-    OEM(u8),
+    Oem(u8),
 }
 impl TryFrom<u8> for ConfidentialityAlgorithm {
     type Error = IpmiPayloadError;
@@ -422,20 +422,20 @@ impl TryFrom<u8> for ConfidentialityAlgorithm {
             0x1 => Ok(ConfidentialityAlgorithm::AesCbc128),
             0x2 => Ok(ConfidentialityAlgorithm::XRc4128),
             0x3 => Ok(ConfidentialityAlgorithm::XRc440),
-            0x30..=0xFF => Ok(ConfidentialityAlgorithm::OEM(value)),
+            0x30..=0xFF => Ok(ConfidentialityAlgorithm::Oem(value)),
             _ => Err(ConfidentialityAlgorithmError::UnknownConfidentialityAlgorithm(value))?,
         }
     }
 }
 
-impl Into<u8> for ConfidentialityAlgorithm {
-    fn into(self) -> u8 {
-        match self {
+impl From<ConfidentialityAlgorithm> for u8 {
+    fn from(val: ConfidentialityAlgorithm) -> Self {
+        match val {
             ConfidentialityAlgorithm::None => 0x00,
             ConfidentialityAlgorithm::AesCbc128 => 0x01,
             ConfidentialityAlgorithm::XRc4128 => 0x02,
             ConfidentialityAlgorithm::XRc440 => 0x03,
-            ConfidentialityAlgorithm::OEM(value) => value,
+            ConfidentialityAlgorithm::Oem(value) => value,
         }
     }
 }

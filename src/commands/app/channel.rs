@@ -1,15 +1,13 @@
 // use crate::ipmi::data::data::Data;
 use std::fmt::Debug;
 
-use bitvec::prelude::*;
-
 use crate::{
     err::{IpmiPayloadError, ParseError, PrivilegeError},
+    helpers::utils::u8_ms_bit,
     parser::{
-        ipmi_payload::IpmiPayload, ipmi_payload_request::IpmiPayloadRequest, AuthType, IpmiHeader,
-        IpmiV1Header, Packet, Payload,
+        netfn::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
     },
-    Command, NetFn,
+    Command,
 };
 
 #[derive(Clone)]
@@ -19,19 +17,28 @@ pub struct GetChannelAuthCapabilitiesRequest {
     pub max_privilege: Privilege,
 }
 
-impl Into<Vec<u8>> for GetChannelAuthCapabilitiesRequest {
-    fn into(self) -> Vec<u8> {
+impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
+    fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
         let mut result = Vec::new();
         result.push({
-            let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            *bv.get_mut(0).unwrap() = self.channel_version;
-            bv[4..].store::<u8>(self.channel_number);
-            let channel_number = bv[..].load::<u8>();
-            channel_number
+            ((val.channel_version as u8) << 7) | (val.channel_number << 4 >> 4)
+            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
+            // *bv.get_mut(0).unwrap() = val.channel_version;
+            // bv[4..].store::<u8>(val.channel_number);
+
+            // bv[..].load::<u8>()
         });
-        result.push(self.max_privilege.into());
+        result.push(val.max_privilege.into());
         result
     }
+}
+#[test]
+fn t() {
+    use bitvec::prelude::*;
+    let mut bv: BitVec<u8, Msb0> = bitvec![u8,Msb0;0;8];
+    *bv.get_mut(0).unwrap() = true;
+    bv[4..].store::<u8>(0b1000_0001);
+    assert_eq!((1 << 7) | (0b1111_0001 << 4 >> 4), bv[..].load::<u8>())
 }
 
 impl GetChannelAuthCapabilitiesRequest {
@@ -63,11 +70,11 @@ impl GetChannelAuthCapabilitiesRequest {
                 auth_code,
                 payload_length: (data_bytes.len() as u8) + 7,
             }),
-            Payload::Ipmi(IpmiPayload::Request(IpmiPayloadRequest::new(
+            Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelAuthCapabilities,
                 Some(self.clone().into()),
-            ))),
+            )),
         )
     }
 }
@@ -93,48 +100,55 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
         if value.len() != 8 {
             Err(IpmiPayloadError::WrongLength)?
         }
-        let auth_bv = BitSlice::<u8, Msb0>::from_element(&value[1]);
-        let auth2_bv = BitSlice::<u8, Msb0>::from_element(&value[2]);
+        // let auth_bv = BitSlice::<u8, Msb0>::from_element(&value[1]);
+        // let auth2_bv = BitSlice::<u8, Msb0>::from_element(&value[2]);
         Ok(GetChannelAuthCapabilitiesResponse {
             channel_number: value[0],
-            auth_version: auth_bv[0].into(),
+            auth_version: u8_ms_bit(value[1], 0).into(),
             auth_type: {
                 let mut result: Vec<AuthType> = vec![];
-                if auth_bv[2] {
-                    result.push(AuthType::OEM)
+                // if auth_bv[2] {
+                if u8_ms_bit(value[1], 2) {
+                    result.push(AuthType::Oem)
                 }
-                if auth_bv[3] {
+                if u8_ms_bit(value[1], 3) {
                     result.push(AuthType::PasswordOrKey)
                 }
-                if auth_bv[5] {
+                if u8_ms_bit(value[1], 5) {
                     result.push(AuthType::MD5)
                 }
-                if auth_bv[6] {
+                if u8_ms_bit(value[1], 6) {
                     result.push(AuthType::MD2)
                 }
-                if auth_bv[7] {
+                if u8_ms_bit(value[1], 7) {
                     result.push(AuthType::None)
                 }
                 result
             },
-            kg_status: auth2_bv[2].into(),
-            per_message_auth: !auth2_bv[3],
-            user_level_auth: !auth2_bv[4],
-            anon_login: AnonLogin::new(auth2_bv[5].into(), auth2_bv[6].into(), auth2_bv[7].into()),
-            channel_extended_cap: BitSlice::<u8, Msb0>::from_element(&value[3])[6].into(),
+            // kg_status: auth2_bv[2].into(),
+            kg_status: u8_ms_bit(value[2], 2).into(),
+            per_message_auth: u8_ms_bit(value[2], 3),
+            user_level_auth: !u8_ms_bit(value[2], 4),
+            anon_login: AnonLogin::new(
+                u8_ms_bit(value[2], 5).into(),
+                u8_ms_bit(value[2], 6).into(),
+                u8_ms_bit(value[2], 7).into(),
+            ),
+            // channel_extended_cap: BitSlice::<u8, Msb0>::from_element(&value[3])[6].into(),
+            channel_extended_cap: u8_ms_bit(value[3], 6).into(),
             oem_id: u32::from_le_bytes([0, value[4], value[5], value[6]]),
             oem_aux_data: value[7],
         })
     }
 }
 
-impl TryFrom<Vec<u8>> for GetChannelAuthCapabilitiesResponse {
-    type Error = IpmiPayloadError;
+// impl TryFrom<&Vec<u8>> for GetChannelAuthCapabilitiesResponse {
+//     type Error = IpmiPayloadError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        value.as_slice().try_into()
-    }
-}
+//     fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+//         value.as_slice().try_into()
+//     }
+// }
 
 #[derive(Debug)]
 
@@ -245,9 +259,9 @@ impl TryFrom<u8> for Privilege {
     }
 }
 
-impl Into<u8> for Privilege {
-    fn into(self) -> u8 {
-        match self {
+impl From<Privilege> for u8 {
+    fn from(val: Privilege) -> Self {
+        match val {
             Privilege::Reserved => 0x00,
             Privilege::Callback => 0x01,
             Privilege::User => 0x02,

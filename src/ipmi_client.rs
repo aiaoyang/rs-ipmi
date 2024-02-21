@@ -14,10 +14,10 @@ use crate::{
     err::{IPMIClientError, PacketError},
     helpers::utils::{append_u128_to_vec, append_u32_to_vec, hash_hmac_sha_256},
     parser::{
-        ipmi_payload::{IpmiPayload, NetFn},
-        ipmi_payload_response::{CompletionCode, IpmiPayloadResponse},
-        ipmi_raw_request::IpmiPayloadRawRequest,
-        rakp::{RAKPMessage1, RAKPMessage2, RAKPMessage3, RAKP},
+        netfn::NetFn,
+        rakp::{RAKPMessage1, RAKPMessage2, RAKPMessage3, Rakp},
+        request::IpmiRawRequest,
+        response::{CompletionCode, RespPayload},
         rmcp_open_session::{
             AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm, RMCPPlusOpenSession,
             RMCPPlusOpenSessionRequest, StatusCode,
@@ -51,6 +51,21 @@ pub struct IPMIClient {
     k1: Option<[u8; 32]>,
     k2: Option<[u8; 32]>,
 }
+
+struct Defer<F: FnMut()>(F);
+
+// impl Defer {
+//     fn new<F: FnMut()>(f: F) -> Self {
+//         Self(Box::new(f))
+//     }
+// }
+
+impl<F: FnMut()> Drop for Defer<F> {
+    fn drop(&mut self) {
+        self.0()
+    }
+}
+
 impl IPMIClient {
     /// Creates client for running IPMI commands against a BMC.
     ///
@@ -67,14 +82,13 @@ impl IPMIClient {
     ///     .expect("Failed to connect to the IPMI server");
     /// ```
     pub fn new<A: ToSocketAddrs>(ipmi_server_addr: A) -> Result<IPMIClient> {
-        let client_socket =
-            UdpSocket::bind("0.0.0.0:0").map_err(|e| IPMIClientError::FailedBind(e))?;
+        let client_socket = UdpSocket::bind("0.0.0.0:0").map_err(IPMIClientError::FailedBind)?;
         let _ = client_socket
             .set_read_timeout(Some(time::Duration::from_secs(20)))
-            .map_err(|e| IPMIClientError::FailedSetSocketReadTimeout(e));
+            .map_err(IPMIClientError::FailedSetSocketReadTimeout);
         client_socket
             .connect(ipmi_server_addr)
-            .map_err(|e| IPMIClientError::ConnectToIPMIServer(e))?;
+            .map_err(IPMIClientError::ConnectToIPMIServer)?;
         Ok(IPMIClient {
             client_socket,
             auth_state: AuthState::Discovery,
@@ -116,7 +130,7 @@ impl IPMIClient {
     pub fn set_read_timeout(&self, duration: Option<Duration>) -> Result<()> {
         self.client_socket
             .set_read_timeout(duration)
-            .map_err(|e| IPMIClientError::SetReadTimeOutError(e))
+            .map_err(IPMIClientError::SetReadTimeOutError)
     }
 
     /// Authenticates and establishes a session with the BMC.
@@ -154,6 +168,52 @@ impl IPMIClient {
         Ok(())
     }
 
+    pub fn send_raw_request_new(&mut self, data: &[u8]) -> Result<RespPayload> {
+        // must establish session first
+        if self.auth_state != AuthState::Established {
+            Err(IPMIClientError::SessionNotEstablishedYet)?
+        };
+
+        // Set session privilege level to ADMIN
+        if self.privilege != Privilege::Administrator {
+            let set_session = IpmiRawRequest::new(
+                NetFn::App,
+                0x3b.into(),
+                Some(vec![Privilege::Administrator.into()]),
+            )
+            .create_packet(
+                self.managed_system_session_id.unwrap(),
+                self.session_seq_number,
+            );
+
+            let set_session_response: Packet = self.send_packet(set_session)?;
+            self.session_seq_number += 1;
+            if let Some(Payload::IpmiResp(payload)) = set_session_response.payload {
+                if payload.completion_code == CompletionCode::CompletedNormally {
+                    self.privilege = Privilege::Administrator;
+                }
+            }
+        }
+        let send_data = if data.len() > 2 {
+            Some(data[2..].to_vec())
+        } else {
+            None
+        };
+
+        let raw_request: Packet = IpmiRawRequest::new(data[0].into(), data[1].into(), send_data)
+            .create_packet(
+                self.managed_system_session_id.unwrap(),
+                self.session_seq_number,
+            );
+
+        let response: Packet = self.send_packet(raw_request)?;
+        self.session_seq_number += 1;
+        if let Some(Payload::IpmiResp(payload)) = response.payload {
+            return Ok(payload);
+        }
+        Err(IPMIClientError::NoResponse)?
+        // Ok(None)
+    }
     /// Run a raw command to the BMC. See "Appendix G - Command Assignments" of the IPMIv2 spec
     /// to see a comprehensive list of default IPMI commands.
     ///
@@ -184,7 +244,7 @@ impl IPMIClient {
         net_fn: T,
         command_code: u8,
         data: C,
-    ) -> Result<IpmiPayloadResponse> {
+    ) -> Result<RespPayload> {
         // must establish session first
         if self.auth_state != AuthState::Established {
             Err(IPMIClientError::SessionNotEstablishedYet)?
@@ -192,58 +252,46 @@ impl IPMIClient {
 
         // Set session privilege level to ADMIN
         if self.privilege != Privilege::Administrator {
-            let set_session = IpmiPayloadRawRequest::new(
+            let set_session = IpmiRawRequest::new(
                 NetFn::App,
-                (0x3b, 0x6.into()).try_into()?,
+                0x3b.into(),
                 Some(vec![Privilege::Administrator.into()]),
             )
             .create_packet(
-                self.managed_system_session_id.clone().unwrap(),
+                self.managed_system_session_id.unwrap(),
                 self.session_seq_number,
             );
 
             let set_session_response: Packet = self.send_packet(set_session)?;
             self.session_seq_number += 1;
-            if let Some(Payload::Ipmi(IpmiPayload::Response(payload))) =
-                set_session_response.payload
-            {
+            if let Some(Payload::IpmiResp(payload)) = set_session_response.payload {
                 if payload.completion_code == CompletionCode::CompletedNormally {
                     self.privilege = Privilege::Administrator;
                 }
             }
         }
 
-        let raw_request: Packet;
-
         let netfn: NetFn = net_fn
             .try_into()
             .map_err(|_e: <T as TryInto<NetFn>>::Error| {
                 IPMIClientError::NetFnError(crate::err::NetFnError::UnknownNetFn(0))
             })?;
-        // let netfn: u8 = net_fn.into();
-        let command: Command = (command_code, netfn)
-            .try_into()
-            .map_err(|e| IPMIClientError::CommandError(e))?;
+        let command: Command = command_code.into();
 
-        match data.into() {
-            None => {
-                raw_request = IpmiPayloadRawRequest::new(netfn, command, None).create_packet(
-                    self.managed_system_session_id.clone().unwrap(),
-                    self.session_seq_number,
-                );
-            }
-            Some(x) => {
-                raw_request = IpmiPayloadRawRequest::new(netfn, command, Some(x.into()))
-                    .create_packet(
-                        self.managed_system_session_id.clone().unwrap(),
-                        self.session_seq_number,
-                    );
-            }
-        }
+        let raw_request: Packet = match data.into() {
+            None => IpmiRawRequest::new(netfn, command, None).create_packet(
+                self.managed_system_session_id.unwrap(),
+                self.session_seq_number,
+            ),
+            Some(x) => IpmiRawRequest::new(netfn, command, Some(x)).create_packet(
+                self.managed_system_session_id.unwrap(),
+                self.session_seq_number,
+            ),
+        };
 
         let response: Packet = self.send_packet(raw_request)?;
         self.session_seq_number += 1;
-        if let Some(Payload::Ipmi(IpmiPayload::Response(payload))) = response.payload {
+        if let Some(Payload::IpmiResp(payload)) = response.payload {
             return Ok(payload);
         }
         Err(IPMIClientError::NoResponse)?
@@ -305,14 +353,14 @@ impl IPMIClient {
             .unwrap()
             .as_bytes()
             .iter()
-            .for_each(|char| rakp3_input_buffer.push(char.clone()));
+            .for_each(|char| rakp3_input_buffer.push(*char));
 
         let rakp3_auth_code =
             hash_hmac_sha_256(self.password_mac_key.clone().unwrap(), rakp3_input_buffer);
         let rakp3_packet: Packet = RAKPMessage3::new(
             0x0,
             StatusCode::NoErrors,
-            self.managed_system_session_id.clone().unwrap(),
+            self.managed_system_session_id.unwrap(),
             Some(rakp3_auth_code.into()),
         )
         .into();
@@ -322,6 +370,7 @@ impl IPMIClient {
     }
 
     fn send_packet(&mut self, request_packet: Packet) -> Result<Packet> {
+        println!("packet: {request_packet:#?}");
         match self.auth_state {
             AuthState::Established => {
                 self.client_socket
@@ -330,13 +379,13 @@ impl IPMIClient {
                             .to_encrypted_bytes(&self.k1.unwrap(), &self.k2.unwrap())
                             .unwrap(),
                     )
-                    .map_err(|e| IPMIClientError::FailedSend(e))?;
+                    .map_err(IPMIClientError::FailedSend)?;
             }
             _ => {
                 let x: Vec<u8> = request_packet.into();
                 self.client_socket
                     .send(&x)
-                    .map_err(|e| IPMIClientError::FailedSend(e))?;
+                    .map_err(IPMIClientError::FailedSend)?;
             }
         }
 
@@ -344,44 +393,42 @@ impl IPMIClient {
 
         if let Ok((n_bytes, _addr)) = self.client_socket.recv_from(&mut recv_buff) {
             let response_slice = &recv_buff[..n_bytes];
-            let response_packet: Packet;
-            match self.k2.clone() {
-                None => response_packet = Packet::try_from(response_slice)?,
-                Some(k2) => response_packet = Packet::try_from((response_slice, &k2))?,
-            }
+            let response_packet: Packet = match self.k2 {
+                Some(k2) => Packet::try_from((response_slice, &k2))?,
+                None => Packet::try_from(response_slice)?,
+            };
             if let Some(payload) = response_packet.clone().payload {
                 match payload {
-                    Payload::Ipmi(IpmiPayload::Request(_)) => {
-                        return Err(IPMIClientError::MisformedResponse)
+                    Payload::IpmiReq(_) => Err(IPMIClientError::MisformedResponse)?,
+                    Payload::IpmiResp(payload) => {
+                        self.handle_completion_code(&payload)?;
                     }
-                    Payload::Ipmi(IpmiPayload::Response(payload)) => {
-                        self.handle_completion_code(payload)?;
+                    Payload::Rmcp(RMCPPlusOpenSession::Request(_)) => {
+                        Err(IPMIClientError::MisformedResponse)?
                     }
-                    Payload::RMCP(RMCPPlusOpenSession::Request(_)) => {
-                        return Err(IPMIClientError::MisformedResponse)
-                    }
-                    Payload::RMCP(RMCPPlusOpenSession::Response(payload)) => self
-                        .handle_status_code(Payload::RMCP(RMCPPlusOpenSession::Response(
+                    Payload::Rmcp(RMCPPlusOpenSession::Response(payload)) => self
+                        .handle_status_code(Payload::Rmcp(RMCPPlusOpenSession::Response(
                             payload,
                         )))?,
-                    Payload::RAKP(RAKP::Message2(payload)) => {
-                        self.handle_status_code(Payload::RAKP(RAKP::Message2(payload)))?
+                    Payload::Rakp(Rakp::Message2(payload)) => {
+                        self.handle_status_code(Payload::Rakp(Rakp::Message2(payload)))?
                     }
-                    Payload::RAKP(RAKP::Message4(payload)) => {
-                        self.handle_status_code(Payload::RAKP(RAKP::Message4(payload)))?
+                    Payload::Rakp(Rakp::Message4(payload)) => {
+                        self.handle_status_code(Payload::Rakp(Rakp::Message4(payload)))?
                     }
                     _ => Err(IPMIClientError::MisformedResponse)?,
                 }
+
                 return Ok(response_packet);
             }
             Ok(response_packet)
         } else {
-            return Err(IPMIClientError::NoResponse);
+            Err(IPMIClientError::NoResponse)
         }
     }
 
     // result bool: true if packet should be returned in the top function
-    fn handle_completion_code(&mut self, payload: IpmiPayloadResponse) -> Result<()> {
+    fn handle_completion_code(&mut self, payload: &RespPayload) -> Result<()> {
         match payload.completion_code {
             CompletionCode::CompletedNormally => match payload.command {
                 Command::GetChannelAuthCapabilities => {
@@ -404,11 +451,10 @@ impl IPMIClient {
     }
 
     fn handle_status_code(&mut self, payload: Payload) -> Result<()> {
-        if let Payload::RMCP(RMCPPlusOpenSession::Response(response)) = payload.clone() {
-            match response.rmcp_plus_status_code {
+        if let Payload::Rmcp(RMCPPlusOpenSession::Response(response)) = &payload {
+            match &response.rmcp_plus_status_code {
                 StatusCode::NoErrors => {
-                    self.managed_system_session_id =
-                        Some(response.managed_system_session_id.clone());
+                    self.managed_system_session_id = Some(response.managed_system_session_id);
                 }
                 _ => Err(IPMIClientError::FailedToOpenSession(
                     response.rmcp_plus_status_code,
@@ -416,8 +462,8 @@ impl IPMIClient {
             }
         }
 
-        if let Payload::RAKP(RAKP::Message2(response)) = payload.clone() {
-            match response.rmcp_plus_status_code {
+        if let Payload::Rakp(Rakp::Message2(response)) = &payload {
+            match &response.rmcp_plus_status_code {
                 StatusCode::NoErrors => {
                     self.managed_system_guid = Some(response.managed_system_guid);
                     self.remote_console_session_id = Some(response.remote_console_session_id);
@@ -430,25 +476,18 @@ impl IPMIClient {
                 ))?,
             }
         }
-        if let Payload::RAKP(RAKP::Message4(response)) = payload.clone() {
+        if let Payload::Rakp(Rakp::Message4(response)) = payload.clone() {
             match response.rmcp_plus_status_code {
                 StatusCode::NoErrors => {
                     // println!("rak4: {:x?}", payload.integrity_check_value.unwrap());
                     let mut rakp4_input_buffer: Vec<u8> = Vec::new();
-                    append_u128_to_vec(
-                        &mut rakp4_input_buffer,
-                        self.remote_console_random_number.clone(),
-                    );
+                    append_u128_to_vec(&mut rakp4_input_buffer, self.remote_console_random_number);
                     append_u32_to_vec(
                         &mut rakp4_input_buffer,
-                        self.managed_system_session_id.clone().unwrap(),
+                        self.managed_system_session_id.unwrap(),
                     );
-                    append_u128_to_vec(
-                        &mut rakp4_input_buffer,
-                        self.managed_system_guid.clone().unwrap(),
-                    );
-                    let auth_code =
-                        hash_hmac_sha_256(self.sik.clone().unwrap().into(), rakp4_input_buffer);
+                    append_u128_to_vec(&mut rakp4_input_buffer, self.managed_system_guid.unwrap());
+                    let auth_code = hash_hmac_sha_256(self.sik.unwrap().into(), rakp4_input_buffer);
 
                     if response.integrity_check_value.clone().unwrap() == auth_code[..16] {
                         // println!("Ses!!!");
@@ -477,14 +516,14 @@ impl IPMIClient {
                 .unwrap()
                 .len()
                 .try_into()
-                .map_err(|e| IPMIClientError::UsernameOver255InLength(e))?,
+                .map_err(IPMIClientError::UsernameOver255InLength)?,
         );
         self.username
             .clone()
             .unwrap()
             .as_bytes()
             .iter()
-            .for_each(|char| sik_input.push(char.clone()));
+            .for_each(|char| sik_input.push(*char));
 
         self.sik = Some(hash_hmac_sha_256(
             self.password_mac_key.clone().unwrap(),
@@ -496,8 +535,8 @@ impl IPMIClient {
         Ok(())
     }
 
-    fn validate_rakp2(&self, response: RAKPMessage2) -> Result<()> {
-        if let None = response.clone().key_exchange_auth_code {
+    fn validate_rakp2(&self, response: &RAKPMessage2) -> Result<()> {
+        if response.key_exchange_auth_code.is_none() {
             return Ok(());
         }
         let mut rakp2_input_buffer: Vec<u8> = Vec::new();
@@ -518,35 +557,32 @@ impl IPMIClient {
         rakp2_input_buffer.push(0x14);
         rakp2_input_buffer.push(
             self.username
-                .clone()
+                .as_ref()
                 .unwrap()
                 .len()
                 .try_into()
-                .map_err(|e| IPMIClientError::UsernameOver255InLength(e))?,
+                .map_err(IPMIClientError::UsernameOver255InLength)?,
         );
         self.username
-            .clone()
+            .as_ref()
             .unwrap()
-            .as_bytes()
-            .iter()
-            .for_each(|char| rakp2_input_buffer.push(char.clone()));
+            .chars()
+            .for_each(|char| rakp2_input_buffer.push(char as u8));
 
         let manual_auth_code =
             hash_hmac_sha_256(self.password_mac_key.clone().unwrap(), rakp2_input_buffer);
         let mut vec_auth_code = Vec::new();
         vec_auth_code.extend_from_slice(manual_auth_code.as_slice());
-        if vec_auth_code != response.key_exchange_auth_code.unwrap() {
+        if &vec_auth_code != response.key_exchange_auth_code.as_ref().unwrap() {
             Err(IPMIClientError::FailedToValidateRAKP2)?
         }
         Ok(())
     }
 
-    fn handle_channel_auth_capabilities(&mut self, payload: IpmiPayloadResponse) -> Result<()> {
-        let response: GetChannelAuthCapabilitiesResponse = payload
-            .data
-            .unwrap()
-            .try_into()
-            .map_err(|e| PacketError::IPMIPayload(e))?;
+    fn handle_channel_auth_capabilities(&mut self, payload: &RespPayload) -> Result<()> {
+        let response: GetChannelAuthCapabilitiesResponse =
+            GetChannelAuthCapabilitiesResponse::try_from(payload.data.as_ref().unwrap().as_slice())
+                .map_err(PacketError::IPMIPayload)?;
         // Currently don't support IPMI v1.5
         if let AuthVersion::IpmiV1_5 = response.auth_version {
             return Err(IPMIClientError::UnsupportedVersion);
@@ -555,16 +591,12 @@ impl IPMIClient {
         Ok(())
     }
 
-    fn handle_cipher_suites(
-        &mut self,
-        payload: IpmiPayloadResponse,
-        cipher_list_index: u8,
-    ) -> Result<()> {
+    fn handle_cipher_suites(&mut self, payload: RespPayload, cipher_list_index: u8) -> Result<()> {
         let response: GetChannelCipherSuitesResponse = payload
             .data
             .unwrap()
             .try_into()
-            .map_err(|e| PacketError::IPMIPayload(e))?;
+            .map_err(PacketError::IPMIPayload)?;
         // update total cipher bytes for the ipmi client object
         if let Some(mut old_bytes) = self.cipher_suite_bytes.clone() {
             response
@@ -580,7 +612,7 @@ impl IPMIClient {
             false => {
                 let cipher_packet = GetChannelCipherSuitesRequest::new(
                     0xe,
-                    PayloadType::IPMI,
+                    PayloadType::Ipmi,
                     true,
                     cipher_list_index,
                 )

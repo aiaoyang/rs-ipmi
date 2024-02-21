@@ -1,6 +1,7 @@
-use bitvec::{prelude::*, vec::BitVec};
-
-use crate::err::{IpmiHeaderError, IpmiV2HeaderError};
+use crate::{
+    err::{IpmiHeaderError, IpmiV2HeaderError},
+    helpers::utils::u8_ms_bit,
+};
 
 use super::ipmi_header::AuthType;
 
@@ -26,17 +27,17 @@ impl TryFrom<&[u8]> for IpmiV2Header {
         }
 
         let auth_type: AuthType = value[0].try_into()?;
-        let payload_bit_slice = BitSlice::<u8, Msb0>::from_element(&value[1]);
-        let payload_enc = payload_bit_slice[0];
-        let payload_auth = payload_bit_slice[1];
-        let payload_type: PayloadType = payload_bit_slice[3..].load::<u8>().try_into()?;
+        let payload_bit_slice = value[1];
+        let payload_enc = u8_ms_bit(payload_bit_slice, 0);
+        let payload_auth = u8_ms_bit(payload_bit_slice, 1);
+        let payload_type: PayloadType = (payload_bit_slice << 3 >> 3).try_into()?;
         let oem_iana: Option<u32>;
         let oem_payload_id: Option<u16>;
         let rmcp_plus_session_id: u32;
         let session_seq_number: u32;
         let payload_length: u16;
         match payload_type {
-            PayloadType::OEM => {
+            PayloadType::Oem => {
                 if value.len() != 18 {
                     Err(IpmiV2HeaderError::WrongLength)?
                 }
@@ -71,48 +72,48 @@ impl TryFrom<&[u8]> for IpmiV2Header {
     }
 }
 
-impl Into<Vec<u8>> for IpmiV2Header {
-    fn into(self) -> Vec<u8> {
-        match self.payload_type {
-            PayloadType::OEM => {
-                let oem_iana_be = self.oem_iana.unwrap().to_le_bytes();
-                let oem_payload_id_be = self.oem_payload_id.unwrap().to_le_bytes();
-                let rmcp_ses_be = self.rmcp_plus_session_id.to_le_bytes();
-                let ses_seq_be = self.session_seq_number.to_le_bytes();
-                let len_be = self.payload_length.to_le_bytes();
+impl From<IpmiV2Header> for Vec<u8> {
+    fn from(val: IpmiV2Header) -> Self {
+        match val.payload_type {
+            PayloadType::Oem => {
+                let oem_iana_le = val.oem_iana.unwrap().to_le_bytes();
+                let oem_payload_id_le = val.oem_payload_id.unwrap().to_le_bytes();
+                let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
+                let ses_seq_le = val.session_seq_number.to_le_bytes();
+                let len_le = val.payload_length.to_le_bytes();
 
                 let mut result = Vec::new();
-                result.extend([self.auth_type.into(), {
-                    let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-                    bv.set(0, self.payload_enc);
-                    bv.set(1, self.payload_auth);
-                    bv[2..].store::<u8>(self.payload_type.into());
-                    let payload_type = bv[..].load::<u8>();
-                    payload_type
+                result.extend([val.auth_type.into(), {
+                    match (val.payload_enc, val.payload_auth) {
+                        (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(val.payload_type)),
+                        (true, false) => (0x1 << 7) | (u8::from(val.payload_type)),
+                        (false, true) => (0x1 << 6) | (u8::from(val.payload_type)),
+                        (false, false) => u8::from(val.payload_type),
+                    }
                 }]);
-                result.extend(oem_iana_be);
-                result.extend(oem_payload_id_be);
-                result.extend(rmcp_ses_be);
-                result.extend(ses_seq_be);
-                result.extend(len_be);
+                result.extend(oem_iana_le);
+                result.extend(oem_payload_id_le);
+                result.extend(rmcp_ses_le);
+                result.extend(ses_seq_le);
+                result.extend(len_le);
                 result
             }
             _ => {
-                let rmcp_ses_be = self.rmcp_plus_session_id.to_le_bytes();
-                let ses_seq_be = self.session_seq_number.to_le_bytes();
-                let len_be = self.payload_length.to_le_bytes();
+                let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
+                let ses_seq_le = val.session_seq_number.to_le_bytes();
+                let len_be = val.payload_length.to_le_bytes();
 
                 let mut result = Vec::new();
-                result.extend([self.auth_type.into(), {
-                    let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-                    bv.set(0, self.payload_enc);
-                    bv.set(1, self.payload_auth);
-                    bv[2..].store::<u8>(self.payload_type.into());
-                    let payload_type = bv[..].load::<u8>();
-                    payload_type
+                result.extend([val.auth_type.into(), {
+                    match (val.payload_enc, val.payload_auth) {
+                        (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(val.payload_type)),
+                        (true, false) => (0x1 << 7) | (u8::from(val.payload_type)),
+                        (false, true) => (0x1 << 6) | (u8::from(val.payload_type)),
+                        (false, false) => u8::from(val.payload_type),
+                    }
                 }]);
-                result.extend(rmcp_ses_be);
-                result.extend(ses_seq_be);
+                result.extend(rmcp_ses_le);
+                result.extend(ses_seq_le);
                 result.extend(len_be);
                 result
             }
@@ -146,9 +147,9 @@ impl IpmiV2Header {
 
 #[derive(Clone, Copy, Debug)]
 pub enum PayloadType {
-    IPMI,
-    SOL,
-    OEM,
+    Ipmi,
+    Sol,
+    Oem,
     RcmpOpenSessionRequest,
     RcmpOpenSessionResponse,
     RAKP1,
@@ -162,9 +163,9 @@ impl TryFrom<u8> for PayloadType {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x00 => Ok(PayloadType::IPMI),
-            0x01 => Ok(PayloadType::SOL),
-            0x02 => Ok(PayloadType::OEM),
+            0x00 => Ok(PayloadType::Ipmi),
+            0x01 => Ok(PayloadType::Sol),
+            0x02 => Ok(PayloadType::Oem),
             0x10 => Ok(PayloadType::RcmpOpenSessionRequest),
             0x11 => Ok(PayloadType::RcmpOpenSessionResponse),
             0x12 => Ok(PayloadType::RAKP1),
@@ -176,12 +177,12 @@ impl TryFrom<u8> for PayloadType {
     }
 }
 
-impl Into<u8> for PayloadType {
-    fn into(self) -> u8 {
-        match &self {
-            PayloadType::IPMI => 0x00,
-            PayloadType::SOL => 0x01,
-            PayloadType::OEM => 0x02,
+impl From<PayloadType> for u8 {
+    fn from(val: PayloadType) -> Self {
+        match &val {
+            PayloadType::Ipmi => 0x00,
+            PayloadType::Sol => 0x01,
+            PayloadType::Oem => 0x02,
             PayloadType::RcmpOpenSessionRequest => 0x10,
             PayloadType::RcmpOpenSessionResponse => 0x11,
             PayloadType::RAKP1 => 0x12,

@@ -1,10 +1,8 @@
 use crate::err::IpmiPayloadError;
-use crate::helpers::utils::join_two_bits_to_byte;
-use crate::parser::ipmi_payload::IpmiPayload;
-use crate::parser::ipmi_payload_request::IpmiPayloadRequest;
+use crate::parser::netfn::NetFn;
+use crate::parser::request::ReqPayload;
 use crate::parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
-use crate::{Command, NetFn};
-use bitvec::prelude::*;
+use crate::Command;
 
 #[derive(Clone)]
 pub struct GetChannelCipherSuitesRequest {
@@ -14,17 +12,18 @@ pub struct GetChannelCipherSuitesRequest {
     pub list_index: u8,
 }
 
-impl Into<Vec<u8>> for GetChannelCipherSuitesRequest {
-    fn into(self) -> Vec<u8> {
+impl From<GetChannelCipherSuitesRequest> for Vec<u8> {
+    fn from(val: GetChannelCipherSuitesRequest) -> Self {
         let mut result = Vec::new();
-        result.push(join_two_bits_to_byte(0, self.channel_number, 4));
-        result.push(join_two_bits_to_byte(0, self.payload_type.into(), 3));
+        result.push(val.channel_number << 4 >> 4);
+        result.push(std::convert::Into::<u8>::into(val.payload_type) << 3 >> 3);
         result.push({
-            let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            *bv.get_mut(0).unwrap() = self.list_algo_cipher_suite;
-            bv[2..].store::<u8>(self.list_index);
-            let list_index = bv[..].load::<u8>();
-            list_index
+            ((val.list_algo_cipher_suite as u8) << 7) | (val.list_index << 2 >> 2)
+            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
+            // *bv.get_mut(0).unwrap() = val.list_algo_cipher_suite;
+            // bv[2..].store::<u8>(val.list_index);
+
+            // bv[..].load::<u8>()
         });
         result
     }
@@ -48,25 +47,25 @@ impl GetChannelCipherSuitesRequest {
     pub fn create_packet(&self) -> Packet {
         let data_bytes: Vec<u8> = self.clone().into();
         // println!("{:x?}", data_bytes);
-        let packet = Packet::new(
+
+        Packet::new(
             IpmiHeader::V2_0(IpmiV2Header {
                 auth_type: AuthType::RmcpPlus,
                 payload_enc: false,
                 payload_auth: false,
-                payload_type: PayloadType::IPMI,
+                payload_type: PayloadType::Ipmi,
                 oem_iana: None,
                 oem_payload_id: None,
                 rmcp_plus_session_id: 0x0,
                 session_seq_number: 0x0,
-                payload_length: ((data_bytes.len() as u8) + 7).try_into().unwrap(),
+                payload_length: ((data_bytes.len() as u8) + 7).into(),
             }),
-            Payload::Ipmi(IpmiPayload::Request(IpmiPayloadRequest::new(
+            Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelCipherSuites,
                 Some(data_bytes),
-            ))),
-        );
-        packet
+            )),
+        )
     }
 }
 
@@ -74,7 +73,7 @@ impl Default for GetChannelCipherSuitesRequest {
     fn default() -> Self {
         GetChannelCipherSuitesRequest {
             channel_number: 0xe,
-            payload_type: PayloadType::IPMI,
+            payload_type: PayloadType::Ipmi,
             list_algo_cipher_suite: true,
             list_index: 0x0,
         }

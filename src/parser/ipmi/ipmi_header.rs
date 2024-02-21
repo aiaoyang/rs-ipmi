@@ -1,5 +1,3 @@
-use bitvec::{field::BitField, order::Msb0, slice::BitSlice};
-
 use crate::err::IpmiHeaderError;
 
 use super::{
@@ -35,9 +33,9 @@ impl TryFrom<&[u8]> for IpmiHeader {
     }
 }
 
-impl Into<Vec<u8>> for IpmiHeader {
-    fn into(self) -> Vec<u8> {
-        match self {
+impl From<IpmiHeader> for Vec<u8> {
+    fn from(val: IpmiHeader) -> Self {
+        match val {
             IpmiHeader::V1_5(header) => header.into(),
             IpmiHeader::V2_0(header) => header.into(),
         }
@@ -54,7 +52,7 @@ impl IpmiHeader {
 
     pub fn payload_type(&self) -> PayloadType {
         match self {
-            IpmiHeader::V1_5(_header) => PayloadType::IPMI,
+            IpmiHeader::V1_5(_header) => PayloadType::Ipmi,
             IpmiHeader::V2_0(header) => header.payload_type,
         }
     }
@@ -64,12 +62,9 @@ impl IpmiHeader {
         match auth_type {
             AuthType::RmcpPlus => {
                 let length = 12;
-                let payload_type: PayloadType = BitSlice::<u8, Msb0>::from_element(&second_byte)
-                    [3..]
-                    .load::<u8>()
-                    .try_into()?;
+                let payload_type: PayloadType = (second_byte << 3 >> 3).try_into()?;
                 match payload_type {
-                    PayloadType::OEM => Ok(length + 6),
+                    PayloadType::Oem => Ok(length + 6),
                     _ => Ok(length),
                 }
             }
@@ -80,8 +75,8 @@ impl IpmiHeader {
 
     pub fn payload_len(&self) -> usize {
         match self {
-            IpmiHeader::V1_5(a) => a.payload_length.try_into().unwrap(),
-            IpmiHeader::V2_0(a) => a.payload_length.try_into().unwrap(),
+            IpmiHeader::V1_5(a) => a.payload_length.into(),
+            IpmiHeader::V2_0(a) => a.payload_length.into(),
         }
     }
 }
@@ -92,7 +87,7 @@ pub enum AuthType {
     MD2,
     MD5,
     PasswordOrKey,
-    OEM,
+    Oem,
     RmcpPlus,
 }
 
@@ -105,21 +100,21 @@ impl TryFrom<u8> for AuthType {
             0x01 => Ok(AuthType::MD2),
             0x02 => Ok(AuthType::MD5),
             0x04 => Ok(AuthType::PasswordOrKey),
-            0x05 => Ok(AuthType::OEM),
+            0x05 => Ok(AuthType::Oem),
             0x06 => Ok(AuthType::RmcpPlus),
             _ => Err(IpmiHeaderError::UnsupportedAuthType(value)),
         }
     }
 }
 
-impl Into<u8> for AuthType {
-    fn into(self) -> u8 {
-        match &self {
+impl From<AuthType> for u8 {
+    fn from(val: AuthType) -> Self {
+        match &val {
             AuthType::None => 0x00,
             AuthType::MD2 => 0x01,
             AuthType::MD5 => 0x02,
             AuthType::PasswordOrKey => 0x04,
-            AuthType::OEM => 0x05,
+            AuthType::Oem => 0x05,
             AuthType::RmcpPlus => 0x06,
         }
     }
