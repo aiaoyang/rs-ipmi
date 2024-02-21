@@ -8,7 +8,7 @@ use std::{
 use crate::{
     err::{IPMIClientError, PacketError},
     rmcp::ipmi::commands::{
-        AuthVersion, CommandType, GetChannelAuthCapabilitiesRequest,
+        AuthVersion, Command, GetChannelAuthCapabilitiesRequest,
         GetChannelAuthCapabilitiesResponse, GetChannelCipherSuitesRequest,
         GetChannelCipherSuitesResponse, Privilege,
     },
@@ -162,15 +162,12 @@ impl IPMIClient {
 
         // Set session privilege level to ADMIN
         if self.privilege != Privilege::Administrator {
-            let set_session = IpmiRawRequest::new(
-                NetFn::App,
-                0x3b.into(),
-                Some(vec![Privilege::Administrator.into()]),
-            )
-            .create_packet(
-                self.managed_system_session_id.unwrap(),
-                self.session_seq_number,
-            );
+            let set_session =
+                IpmiRawRequest::new(NetFn::App, 0x3b, Some(vec![Privilege::Administrator as u8]))
+                    .create_packet(
+                        self.managed_system_session_id.unwrap(),
+                        self.session_seq_number,
+                    );
 
             let set_session_response: Packet = self.send_packet(set_session)?;
             self.session_seq_number += 1;
@@ -186,7 +183,7 @@ impl IPMIClient {
             None
         };
 
-        let raw_request: Packet = IpmiRawRequest::new(data[0].into(), data[1].into(), send_data)
+        let raw_request: Packet = IpmiRawRequest::new(data[0].into(), data[1], send_data)
             .create_packet(
                 self.managed_system_session_id.unwrap(),
                 self.session_seq_number,
@@ -225,11 +222,11 @@ impl IPMIClient {
     ///     .send_raw_request(NetFn::App, Command::SetSessionPrivilegeLevel.into(), Some(vec![0x4]))
     ///     .map_err(|e: IPMIClientError| println!("{}", e));
     /// ```
-    pub fn send_raw_request<C: Into<Option<Vec<u8>>>, T: TryInto<NetFn>>(
+    pub fn send_raw_request<D: Into<Option<Vec<u8>>>, T: TryInto<NetFn>>(
         &mut self,
         net_fn: T,
         command_code: u8,
-        data: C,
+        data: D,
     ) -> Result<RespPayload> {
         // must establish session first
         if self.auth_state != AuthState::Established {
@@ -238,15 +235,12 @@ impl IPMIClient {
 
         // Set session privilege level to ADMIN
         if self.privilege != Privilege::Administrator {
-            let set_session = IpmiRawRequest::new(
-                NetFn::App,
-                0x3b.into(),
-                Some(vec![Privilege::Administrator.into()]),
-            )
-            .create_packet(
-                self.managed_system_session_id.unwrap(),
-                self.session_seq_number,
-            );
+            let set_session =
+                IpmiRawRequest::new(NetFn::App, 0x3b, Some(vec![Privilege::Administrator as u8]))
+                    .create_packet(
+                        self.managed_system_session_id.unwrap(),
+                        self.session_seq_number,
+                    );
 
             let set_session_response: Packet = self.send_packet(set_session)?;
             self.session_seq_number += 1;
@@ -262,7 +256,7 @@ impl IPMIClient {
             .map_err(|_e: <T as TryInto<NetFn>>::Error| {
                 IPMIClientError::NetFnError(crate::err::NetFnError::UnknownNetFn(0))
             })?;
-        let command: CommandType = command_code.into();
+        let command: Command = command_code.into();
 
         let raw_request: Packet = match data.into() {
             None => IpmiRawRequest::new(netfn, command, None).create_packet(
@@ -417,10 +411,10 @@ impl IPMIClient {
     fn handle_completion_code(&mut self, payload: &RespPayload) -> Result<()> {
         match payload.completion_code {
             CompletionCode::CompletedNormally => match payload.command {
-                CommandType::GetChannelAuthCapabilities => {
+                Command::GetChannelAuthCapabilities => {
                     self.handle_channel_auth_capabilities(payload)?
                 }
-                CommandType::GetChannelCipherSuites => {
+                Command::GetChannelCipherSuites => {
                     while let AuthState::Discovery = self.auth_state {
                         self.cipher_list_index += 1;
                         self.handle_cipher_suites(payload.clone(), self.cipher_list_index)?;

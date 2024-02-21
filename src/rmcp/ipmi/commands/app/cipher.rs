@@ -2,7 +2,7 @@ use crate::err::IpmiPayloadError;
 use crate::rmcp::netfn_lun::NetFn;
 use crate::rmcp::request::ReqPayload;
 use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
-use crate::CommandType;
+use crate::Command;
 
 #[derive(Clone)]
 pub struct GetChannelCipherSuitesRequest {
@@ -54,7 +54,7 @@ impl GetChannelCipherSuitesRequest {
             }),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
-                CommandType::GetChannelCipherSuites,
+                Command::GetChannelCipherSuites,
                 Some(data_bytes),
             )),
         )

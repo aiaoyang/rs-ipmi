@@ -114,7 +114,7 @@ impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
         let mut result = Vec::new();
         result.push(val.message_tag);
-        result.push(val.max_privilege.into());
+        result.push(val.max_privilege as u8);
         result.extend([0x0, 0x0]); // reserved bytes
         result.extend(u32::to_le_bytes(val.remote_console_session_id)); // remote console session id
         result.push(0x0); // auth payload type

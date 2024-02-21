@@ -1,5 +1,3 @@
-use std::fmt;
-
 use crate::err::LunError;
 
 pub type RqseqLun = NetfnLun;
@@ -12,11 +10,11 @@ impl RqseqLun {
 #[derive(Debug, Clone, Copy)]
 pub struct NetfnLun(pub u8);
 
-impl std::fmt::Display for NetfnLun {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{}", self.0))
-    }
-}
+// impl std::fmt::Display for NetfnLun {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.write_fmt(format_args!("{}", self.0))
+//     }
+// }
 
 impl From<u8> for NetfnLun {
     fn from(value: u8) -> Self {
@@ -51,21 +49,21 @@ pub enum NetFn {
     Unknown(u8),
 }
 
-impl fmt::Display for NetFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NetFn::Chassis => write!(f, "Chassis"),
-            NetFn::Bridge => write!(f, "Bridge"),
-            NetFn::SensorEvent => write!(f, "Sensor Event"),
-            NetFn::App => write!(f, "App"),
-            NetFn::Firmware => write!(f, "Firmware"),
-            NetFn::Storage => write!(f, "Storage"),
-            NetFn::Transport => write!(f, "Transport"),
-            NetFn::Reserved => write!(f, "Reserved"),
-            NetFn::Unknown(x) => write!(f, "Unknown: {}", x),
-        }
-    }
-}
+// impl fmt::Display for NetFn {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             NetFn::Chassis => write!(f, "Chassis"),
+//             NetFn::Bridge => write!(f, "Bridge"),
+//             NetFn::SensorEvent => write!(f, "Sensor Event"),
+//             NetFn::App => write!(f, "App"),
+//             NetFn::Firmware => write!(f, "Firmware"),
+//             NetFn::Storage => write!(f, "Storage"),
+//             NetFn::Transport => write!(f, "Transport"),
+//             NetFn::Reserved => write!(f, "Reserved"),
+//             NetFn::Unknown(x) => write!(f, "Unknown: {}", x),
+//         }
+//     }
+// }
 
 impl From<u8> for NetFn {
     fn from(value: u8) -> Self {

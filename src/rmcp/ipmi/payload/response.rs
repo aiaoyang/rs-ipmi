@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::{
     err::{IpmiPayloadError, IpmiPayloadRequestError},
-    rmcp::commands::CommandType,
+    rmcp::commands::Command,
 };
 
 use super::{
@@ -19,31 +19,31 @@ pub struct RespPayload {
     // checksum 1
     pub rs_addr: Address,
     pub rqseq_rslun: RqseqLun,
-    pub command: CommandType,
+    pub command: Command,
     pub completion_code: CompletionCode,
     pub data: Option<Vec<u8>>,
     // checksum 2
 }
 
-impl fmt::Display for RespPayload {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let data: String = match self.data.clone() {
-            Some(x) => format!("{:x?}", x),
-            None => "None".to_string(),
-        };
-        write!(
-            f,
-            "IPMI Response:\n\tRequester Address: {}\n\tNetFn: {}\n\tResponder Address: {}\n\tRequester Sequence Number: {}\n\tCommand: {}\n\tCompletion Code: {}\n\tDate: {}",
-            self.rq_addr,
-            self.netfn_rqlun.netfn(),
-            self.rs_addr,
-            self.rqseq_rslun.rqseq(),
-            self.command,
-            self.completion_code,
-            data
-        )
-    }
-}
+// impl fmt::Display for RespPayload {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         let data: String = match self.data.clone() {
+//             Some(x) => format!("{:x?}", x),
+//             None => "None".to_string(),
+//         };
+//         write!(
+//             f,
+//             "IPMI Response:\n\tRequester Address: {}\n\tNetFn: {}\n\tResponder Address: {}\n\tRequester Sequence Number: {}\n\tCommand: {}\n\tCompletion Code: {:?}\n\tDate: {}",
+//             self.rq_addr,
+//             self.netfn_rqlun.netfn(),
+//             self.rs_addr,
+//             self.rqseq_rslun.rqseq(),
+//             self.command,
+//             self.completion_code,
+//             data
+//         )
+//     }
+// }
 
 impl TryFrom<&[u8]> for RespPayload {
     type Error = IpmiPayloadError;
@@ -139,40 +139,40 @@ pub enum CompletionCode {
     Reserved(u8),
 }
 
-impl fmt::Display for CompletionCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompletionCode::CompletedNormally => write!(f, "Command Completed Normally"),
-            CompletionCode::NodeBusy => write!(f, "Node Busy. Command could not be processed because command processing resources are temporarily unavailable"),
-            CompletionCode::InvalidCommand => write!(f, "Invalid Command. Used to indicate an unrecognized or unsupported command"),
-            CompletionCode::InvalidCommandForLun => write!(f, "Command invalid for given LUN"),
-            CompletionCode::Timeout => write!(f, "Timeout while processing command. Response unavailable"),
-            CompletionCode::OutOfSpace => write!(f, "Out of space. Command could not be completed because of a lack of storage space required to execute the given command operation"),
-            CompletionCode::ReservationCancelled => write!(f, "Reservation Canceled or Invalid Reservation ID"),
-            CompletionCode::RequestDataTruncated => write!(f, "Request data truncated"),
-            CompletionCode::RequestDataLengthInvalid => write!(f, "Request data length invalid"),
-            CompletionCode::RequestDataFieldLengthLimitExceeded => write!(f, "Request data field length limit exceeded"),
-            CompletionCode::ParameterOutOfRange => write!(f, "Parameter out of range. One or more parameters in the data field of the Request are out of range. This is different from ‘Invalid data field’ (CCh) code in that it indicates that the erroneous field(s) has a contiguous range of possible values"),
-            CompletionCode::CannotReturnNumberOfRqDataBytes => write!(f, "Cannot return number of requested data bytes"),
-            CompletionCode::RqSensorDataRecordNotPresent => write!(f, "Requested Sensor, data, or record not present"),
-            CompletionCode::InvalidDataFieldInRequest => write!(f, "Invalid data field in Request"),
-            CompletionCode::CommandIllegalForSensor => write!(f, "Command illegal for specified sensor or record type"),
-            CompletionCode::CommandResponseNotProvided => write!(f, "Command response could not be provided"),
-            CompletionCode::CantExecuteDuplicateRq => write!(f, "Cannot execute duplicated request"),
-            CompletionCode::FailedSDRUpdateMode => write!(f, "Command response could not be provided. SDR Repository in update mode"),
-            CompletionCode::FailedDevFirmwareMode => write!(f, "Command response could not be provided. Device in firmware update mode"),
-            CompletionCode::FailedInitInProgress => write!(f, "Command response could not be provided. BMC initialization or initialization agent in progress"),
-            CompletionCode::DestinationUnavailable => write!(f, "Destination unavailable"),
-            CompletionCode::CannotExecuteCommandInsuffientPrivileges => write!(f, "Cannot execute command due to insufficient privilege level or other securitybased restriction (e.g. disabled for ‘firmware firewall’)."),
-            CompletionCode::CommandSubFunctionUnavailable => write!(f, "Cannot execute command. Command, or request parameter(s), not supported in present state"),
-            CompletionCode::CannotExecuteCommandIllegalParam => write!(f, "Cannot execute command. Parameter is illegal because command sub-function has been disabled or is unavailable (e.g. disabled for ‘firmware firewall’)"),
-            CompletionCode::UnspecifiedError => write!(f, "Unspecified error"),
-            CompletionCode::OEM(x) => write!(f, "Device specific (OEM) completion code: 0x{:X}", x),
-            CompletionCode::CommandCode(x) => write!(f, "Command specific code: 0x{:X}", x),
-            CompletionCode::Reserved(x) => write!(f, "Reserved code: 0x{:X}", x),
-        }
-    }
-}
+// impl fmt::Display for CompletionCode {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             CompletionCode::CompletedNormally => write!(f, "Command Completed Normally"),
+//             CompletionCode::NodeBusy => write!(f, "Node Busy. Command could not be processed because command processing resources are temporarily unavailable"),
+//             CompletionCode::InvalidCommand => write!(f, "Invalid Command. Used to indicate an unrecognized or unsupported command"),
+//             CompletionCode::InvalidCommandForLun => write!(f, "Command invalid for given LUN"),
+//             CompletionCode::Timeout => write!(f, "Timeout while processing command. Response unavailable"),
+//             CompletionCode::OutOfSpace => write!(f, "Out of space. Command could not be completed because of a lack of storage space required to execute the given command operation"),
+//             CompletionCode::ReservationCancelled => write!(f, "Reservation Canceled or Invalid Reservation ID"),
+//             CompletionCode::RequestDataTruncated => write!(f, "Request data truncated"),
+//             CompletionCode::RequestDataLengthInvalid => write!(f, "Request data length invalid"),
+//             CompletionCode::RequestDataFieldLengthLimitExceeded => write!(f, "Request data field length limit exceeded"),
+//             CompletionCode::ParameterOutOfRange => write!(f, "Parameter out of range. One or more parameters in the data field of the Request are out of range. This is different from ‘Invalid data field’ (CCh) code in that it indicates that the erroneous field(s) has a contiguous range of possible values"),
+//             CompletionCode::CannotReturnNumberOfRqDataBytes => write!(f, "Cannot return number of requested data bytes"),
+//             CompletionCode::RqSensorDataRecordNotPresent => write!(f, "Requested Sensor, data, or record not present"),
+//             CompletionCode::InvalidDataFieldInRequest => write!(f, "Invalid data field in Request"),
+//             CompletionCode::CommandIllegalForSensor => write!(f, "Command illegal for specified sensor or record type"),
+//             CompletionCode::CommandResponseNotProvided => write!(f, "Command response could not be provided"),
+//             CompletionCode::CantExecuteDuplicateRq => write!(f, "Cannot execute duplicated request"),
+//             CompletionCode::FailedSDRUpdateMode => write!(f, "Command response could not be provided. SDR Repository in update mode"),
+//             CompletionCode::FailedDevFirmwareMode => write!(f, "Command response could not be provided. Device in firmware update mode"),
+//             CompletionCode::FailedInitInProgress => write!(f, "Command response could not be provided. BMC initialization or initialization agent in progress"),
+//             CompletionCode::DestinationUnavailable => write!(f, "Destination unavailable"),
+//             CompletionCode::CannotExecuteCommandInsuffientPrivileges => write!(f, "Cannot execute command due to insufficient privilege level or other securitybased restriction (e.g. disabled for ‘firmware firewall’)."),
+//             CompletionCode::CommandSubFunctionUnavailable => write!(f, "Cannot execute command. Command, or request parameter(s), not supported in present state"),
+//             CompletionCode::CannotExecuteCommandIllegalParam => write!(f, "Cannot execute command. Parameter is illegal because command sub-function has been disabled or is unavailable (e.g. disabled for ‘firmware firewall’)"),
+//             CompletionCode::UnspecifiedError => write!(f, "Unspecified error"),
+//             CompletionCode::OEM(x) => write!(f, "Device specific (OEM) completion code: 0x{:X}", x),
+//             CompletionCode::CommandCode(x) => write!(f, "Command specific code: 0x{:X}", x),
+//             CompletionCode::Reserved(x) => write!(f, "Reserved code: 0x{:X}", x),
+//         }
+//     }
+// }
 
 impl From<u8> for CompletionCode {
     fn from(value: u8) -> Self {

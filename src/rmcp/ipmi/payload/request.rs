@@ -1,5 +1,5 @@
 use crate::{
-    rmcp::commands::CommandType,
+    rmcp::commands::Command,
     rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
@@ -11,16 +11,20 @@ use super::{
 
 pub struct IpmiRawRequest {
     pub netfn: NetFn,
-    pub command_code: CommandType,
+    pub command_code: Command,
     pub data: Option<Vec<u8>>,
 }
 
 impl IpmiRawRequest {
     const PAYLOAD_LENGTH: u16 = 32;
-    pub fn new(netfn: NetFn, command_code: CommandType, data: Option<Vec<u8>>) -> IpmiRawRequest {
+    pub fn new(
+        netfn: NetFn,
+        command_code: impl Into<Command>,
+        data: Option<Vec<u8>>,
+    ) -> IpmiRawRequest {
         IpmiRawRequest {
             netfn,
-            command_code,
+            command_code: command_code.into(),
             data,
         }
     }
@@ -53,7 +57,7 @@ pub struct ReqPayload {
     // checksum 1
     pub rq_addr: Address,
     pub rqseq_rqlun: RqseqLun,
-    pub command: CommandType,
+    pub command: Command,
     pub data: Option<Vec<u8>>,
     // checksum 2
 }
@@ -88,7 +92,7 @@ impl From<ReqPayload> for Vec<u8> {
 }
 
 impl ReqPayload {
-    pub fn new(net_fn: NetFn, command: CommandType, data: Option<Vec<u8>>) -> ReqPayload {
+    pub fn new(net_fn: NetFn, command: Command, data: Option<Vec<u8>>) -> ReqPayload {
         ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
@@ -107,7 +111,7 @@ impl Default for ReqPayload {
             netfn_rslun: NetfnLun::new(NetFn::App, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
             rqseq_rqlun: RqseqLun::new(0x00, Lun::Bmc),
-            command: CommandType::GetChannelAuthCapabilities,
+            command: Command::GetChannelAuthCapabilities,
             data: None,
         }
     }

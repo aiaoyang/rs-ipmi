@@ -43,7 +43,7 @@ impl From<RAKPMessage1> for Vec<u8> {
         result.extend(u32::to_le_bytes(val.managed_system_session_id));
         result.extend(u128::to_le_bytes(val.remote_console_random_number));
         result.push(
-            ((val.inherit_role as u8) << 4) | (u8::from(val.requested_max_privilege) << 4 >> 4),
+            ((val.inherit_role as u8) << 4) | ((val.requested_max_privilege as u8) << 4 >> 4),
         );
         result.extend([0x0, 0x0]);
         result.push(val.username_length);

@@ -6,7 +6,7 @@ use crate::{
     rmcp::{
         netfn_lun::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
     },
-    u8_ms_bit, CommandType,
+    u8_ms_bit, Command,
 };
 
 #[derive(Clone)]
@@ -20,7 +20,7 @@ impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
     fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
         vec![
             ((val.channel_version as u8) << 7 | val.channel_number << 4 >> 4),
-            val.max_privilege.into(),
+            val.max_privilege as u8,
         ]
     }
 }
@@ -56,7 +56,7 @@ impl GetChannelAuthCapabilitiesRequest {
             }),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
-                CommandType::GetChannelAuthCapabilities,
+                Command::GetChannelAuthCapabilities,
                 Some(self.clone().into()),
             )),
         )
@@ -235,15 +235,15 @@ impl TryFrom<u8> for Privilege {
     }
 }
 
-impl From<Privilege> for u8 {
-    fn from(val: Privilege) -> Self {
-        match val {
-            Privilege::Reserved => 0x00,
-            Privilege::Callback => 0x01,
-            Privilege::User => 0x02,
-            Privilege::Operator => 0x03,
-            Privilege::Administrator => 0x04,
-            Privilege::Oem => 0x05,
-        }
-    }
-}
+// impl From<Privilege> for u8 {
+//     fn from(val: Privilege) -> Self {
+//         match val {
+//             Privilege::Reserved => 0x00,
+//             Privilege::Callback => 0x01,
+//             Privilege::User => 0x02,
+//             Privilege::Operator => 0x03,
+//             Privilege::Administrator => 0x04,
+//             Privilege::Oem => 0x05,
+//         }
+//     }
+// }
