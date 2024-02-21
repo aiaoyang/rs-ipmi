@@ -3,11 +3,10 @@ use std::fmt::Debug;
 
 use crate::{
     err::{IpmiPayloadError, ParseError, PrivilegeError},
-    helpers::utils::u8_ms_bit,
-    parser::{
+    rmcp::{
         netfn::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
     },
-    Command,
+    u8_ms_bit, Command,
 };
 
 #[derive(Clone)]
@@ -19,26 +18,11 @@ pub struct GetChannelAuthCapabilitiesRequest {
 
 impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
     fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
-        let mut result = Vec::new();
-        result.push({
-            ((val.channel_version as u8) << 7) | (val.channel_number << 4 >> 4)
-            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            // *bv.get_mut(0).unwrap() = val.channel_version;
-            // bv[4..].store::<u8>(val.channel_number);
-
-            // bv[..].load::<u8>()
-        });
-        result.push(val.max_privilege.into());
-        result
+        vec![
+            ((val.channel_version as u8) << 7 | val.channel_number << 4 >> 4),
+            val.max_privilege.into(),
+        ]
     }
-}
-#[test]
-fn t() {
-    use bitvec::prelude::*;
-    let mut bv: BitVec<u8, Msb0> = bitvec![u8,Msb0;0;8];
-    *bv.get_mut(0).unwrap() = true;
-    bv[4..].store::<u8>(0b1000_0001);
-    assert_eq!((1 << 7) | (0b1111_0001 << 4 >> 4), bv[..].load::<u8>())
 }
 
 impl GetChannelAuthCapabilitiesRequest {

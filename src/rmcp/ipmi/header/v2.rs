@@ -1,9 +1,7 @@
-use crate::{
-    err::{IpmiHeaderError, IpmiV2HeaderError},
-    helpers::utils::u8_ms_bit,
-};
+use crate::err::{IpmiHeaderError, IpmiV2HeaderError};
+use crate::u8_ms_bit;
 
-use super::ipmi_header::AuthType;
+use super::AuthType;
 
 #[derive(Clone, Copy, Debug)]
 pub struct IpmiV2Header {

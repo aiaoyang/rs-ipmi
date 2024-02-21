@@ -1,7 +1,7 @@
 use crate::err::IpmiPayloadError;
-use crate::parser::netfn::NetFn;
-use crate::parser::request::ReqPayload;
-use crate::parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
+use crate::rmcp::netfn::NetFn;
+use crate::rmcp::request::ReqPayload;
+use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
 use crate::Command;
 
 #[derive(Clone)]
@@ -14,18 +14,11 @@ pub struct GetChannelCipherSuitesRequest {
 
 impl From<GetChannelCipherSuitesRequest> for Vec<u8> {
     fn from(val: GetChannelCipherSuitesRequest) -> Self {
-        let mut result = Vec::new();
-        result.push(val.channel_number << 4 >> 4);
-        result.push(std::convert::Into::<u8>::into(val.payload_type) << 3 >> 3);
-        result.push({
-            ((val.list_algo_cipher_suite as u8) << 7) | (val.list_index << 2 >> 2)
-            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            // *bv.get_mut(0).unwrap() = val.list_algo_cipher_suite;
-            // bv[2..].store::<u8>(val.list_index);
-
-            // bv[..].load::<u8>()
-        });
-        result
+        vec![
+            (val.channel_number << 4 >> 4),
+            (std::convert::Into::<u8>::into(val.payload_type) << 3 >> 3),
+            (((val.list_algo_cipher_suite as u8) << 7) | (val.list_index << 2 >> 2)),
+        ]
     }
 }
 
@@ -46,7 +39,6 @@ impl GetChannelCipherSuitesRequest {
 
     pub fn create_packet(&self) -> Packet {
         let data_bytes: Vec<u8> = self.clone().into();
-        // println!("{:x?}", data_bytes);
 
         Packet::new(
             IpmiHeader::V2_0(IpmiV2Header {

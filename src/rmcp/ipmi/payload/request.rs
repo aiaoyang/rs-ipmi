@@ -1,11 +1,10 @@
 use crate::{
     commands::Command,
-    helpers::utils::checksum,
-    parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
 use super::{
-    ipmi_payload::{SlaveAddress, SoftwareType},
+    bmc::{SlaveAddress, SoftwareType},
     lun::Lun,
     netfn::{CommandType, NetFn, NetfnLun},
     response::Address,
@@ -117,4 +116,13 @@ impl Default for ReqPayload {
             data: None,
         }
     }
+}
+
+// two's complement sum
+pub fn checksum(input: &[u8]) -> u8 {
+    let mut res = 0_i32;
+    for val in input {
+        res += *val as i32
+    }
+    (-res) as u8
 }

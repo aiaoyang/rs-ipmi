@@ -80,28 +80,6 @@ impl fmt::Display for Command {
         }
     }
 }
-
-// type CommandAndNetfn = (u8, NetFn);
-
-// impl TryFrom<CommandAndNetfn> for Command {
-//     type Error = CommandError;
-
-//     fn try_from(value: CommandAndNetfn) -> Result<Self, CommandError> {
-//         let command_code = value.0;
-//         let netfn = value.1;
-//         match netfn {
-//             NetFn::App => match command_code {
-//                 0x38 => Ok(Command::GetChannelAuthCapabilities),
-//                 0x54 => Ok(Command::GetChannelCipherSuites),
-//                 0x3b => Ok(Command::SetSessionPrivilegeLevel),
-//                 _ => Ok(Command::Unknown(command_code)),
-//                 // _ => Err(CommandError::UnknownCommandCode(command_code))?,
-//             },
-//             _ => Ok(Command::Unknown(command_code)),
-//         }
-//     }
-// }
-
 impl From<u8> for Command {
     fn from(val: u8) -> Self {
         match val {
@@ -123,14 +101,3 @@ impl From<Command> for u8 {
         }
     }
 }
-
-// impl From<Command> for CommandAndNetfn {
-//     fn from(val: Command) -> Self {
-//         match val {
-//             Command::GetChannelAuthCapabilities => (0x38, NetFn::App),
-//             Command::GetChannelCipherSuites => (0x54, NetFn::App),
-//             Command::SetSessionPrivilegeLevel => (0x3b, NetFn::App),
-//             Command::Unknown(x) => (x, NetFn::Unknown(0)),
-//         }
-//     }
-// }

@@ -88,7 +88,7 @@ impl From<u8> for NetFn {
             0x0A..=0x0B => NetFn::Storage,
             0x0C..=0x0D => NetFn::Transport,
             0x0E..=0x2B => NetFn::Reserved,
-            _ => NetFn::Unknown(value), // _ => Err(NetFnError::UnknownNetFn(value)),
+            _ => NetFn::Unknown(value),
         }
     }
 }

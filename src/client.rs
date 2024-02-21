@@ -12,16 +12,16 @@ use crate::{
         GetChannelCipherSuitesResponse, Privilege,
     },
     err::{IPMIClientError, PacketError},
-    helpers::utils::{append_u128_to_vec, append_u32_to_vec, hash_hmac_sha_256},
-    parser::{
+    rmcp::{
+        crypto::hash_hmac_sha_256,
         netfn::NetFn,
-        rakp::{RAKPMessage1, RAKPMessage2, RAKPMessage3, Rakp},
-        request::IpmiRawRequest,
-        response::{CompletionCode, RespPayload},
-        rmcp_open_session::{
+        open_session::{
             AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm, RMCPPlusOpenSession,
             RMCPPlusOpenSessionRequest, StatusCode,
         },
+        rakp::{RAKPMessage1, RAKPMessage2, RAKPMessage3, Rakp},
+        request::IpmiRawRequest,
+        response::{CompletionCode, RespPayload},
         AuthType, Packet, Payload, PayloadType,
     },
 };
@@ -50,20 +50,6 @@ pub struct IPMIClient {
     sik: Option<[u8; 32]>,
     k1: Option<[u8; 32]>,
     k2: Option<[u8; 32]>,
-}
-
-struct Defer<F: FnMut()>(F);
-
-// impl Defer {
-//     fn new<F: FnMut()>(f: F) -> Self {
-//         Self(Box::new(f))
-//     }
-// }
-
-impl<F: FnMut()> Drop for Defer<F> {
-    fn drop(&mut self) {
-        self.0()
-    }
 }
 
 impl IPMIClient {
@@ -688,4 +674,12 @@ enum AuthState {
     Discovery,
     Authentication,
     Established,
+}
+
+pub fn append_u32_to_vec(main_vec: &mut Vec<u8>, append: u32) {
+    append.to_le_bytes().map(|byte| main_vec.push(byte));
+}
+
+pub fn append_u128_to_vec(main_vec: &mut Vec<u8>, append: u128) {
+    append.to_le_bytes().map(|byte| main_vec.push(byte));
 }

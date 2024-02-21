@@ -31,15 +31,31 @@
 //!     }
 //!
 //! ```
+mod client;
 mod commands;
 mod err;
-mod helpers;
-mod ipmi_client;
-mod parser;
+mod rmcp;
 
+pub use client::IPMIClient;
 pub use commands::Command;
 pub use err::IPMIClientError;
-pub use ipmi_client::IPMIClient;
-pub use parser::response::CompletionCode;
-pub use parser::Entry;
-pub use parser::NetFn;
+pub use rmcp::response::CompletionCode;
+pub use rmcp::Entry;
+pub use rmcp::NetFn;
+
+pub const fn u8_ms_bit(value: u8, index: u8) -> bool {
+    if index > 7 {
+        panic!("unsupported position")
+    }
+    (value << (index) >> 7) != 0
+}
+#[test]
+fn position() {
+    assert!(u8_ms_bit(0b1, 7));
+    assert!(!u8_ms_bit(0b1, 6));
+    assert!(!u8_ms_bit(0b10, 7));
+    assert!(u8_ms_bit(0b10, 6));
+
+    assert!(u8_ms_bit(0b1000_0000, 0));
+    assert!(!u8_ms_bit(0b1000_0000, 7));
+}

@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    ipmi_payload::{AddrType, SlaveAddress, SoftwareType},
+    bmc::{AddrType, SlaveAddress, SoftwareType},
     lun::Lun,
     netfn::{NetFn, NetfnLun},
 };
@@ -104,7 +104,6 @@ impl fmt::Display for Address {
 
 impl From<u8> for Address {
     fn from(value: u8) -> Self {
-        // let bitslice = BitSlice::<u8, Msb0>::from_element(&value);
         let rs_addr_type: AddrType = ((value >> 7) != 0).into();
         match rs_addr_type {
             AddrType::SlaveAddress => Self::Slave((value << 1 >> 1).into()),

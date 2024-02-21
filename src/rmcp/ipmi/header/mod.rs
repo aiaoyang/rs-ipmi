@@ -1,20 +1,15 @@
+pub mod v1;
+pub mod v2;
 use crate::err::IpmiHeaderError;
 
-use super::{
-    ipmi_v1_header::IpmiV1Header,
-    ipmi_v2_header::{IpmiV2Header, PayloadType},
-};
+use v1::IpmiV1Header;
+use v2::{IpmiV2Header, PayloadType};
 
 #[derive(Clone, Copy, Debug)]
 pub enum IpmiHeader {
     V1_5(IpmiV1Header),
     V2_0(IpmiV2Header),
 }
-
-// pub enum Version {
-//     V1_5,
-//     V2_0,
-// }
 
 impl TryFrom<&[u8]> for IpmiHeader {
     type Error = IpmiHeaderError;
@@ -43,13 +38,6 @@ impl From<IpmiHeader> for Vec<u8> {
 }
 
 impl IpmiHeader {
-    // pub fn version_from_auth_type(auth_type: AuthType) -> Version {
-    //     match auth_type {
-    //         AuthType::RmcpPlus => Version::V2_0,
-    //         _ => Version::V1_5,
-    //     }
-    // }
-
     pub fn payload_type(&self) -> PayloadType {
         match self {
             IpmiHeader::V1_5(_header) => PayloadType::Ipmi,

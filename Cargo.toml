@@ -13,7 +13,6 @@ version = "0.1.1"
 
 [dependencies]
 aes = "0.8.3"
-bitvec = "1.0.1"
 cbc = "0.1.2"
 hmac = "0.12.1"
 lazy_static = "1.4.0"

@@ -19,9 +19,3 @@ fn main() {
         println!("no data")
     }
 }
-
-#[test]
-fn t() {
-    let a = u16::from_le_bytes([1, 4]);
-    println!("{a}");
-}

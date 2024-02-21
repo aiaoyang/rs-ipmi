@@ -4,7 +4,7 @@ use crate::{
         AuthAlgorithmError, ConfidentialityAlgorithmError, IntegrityAlgorithmError,
         IpmiPayloadError,
     },
-    parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
 #[derive(Clone, Debug)]

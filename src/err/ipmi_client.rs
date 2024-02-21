@@ -2,7 +2,7 @@ use std::{io, num::TryFromIntError};
 
 use thiserror::Error;
 
-use crate::parser::rmcp_open_session::StatusCode;
+use crate::rmcp::open_session::StatusCode;
 
 use super::{CommandError, NetFnError, PacketError};
 

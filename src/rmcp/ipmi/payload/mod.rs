@@ -1,4 +1,4 @@
-pub mod ipmi_payload;
+pub mod bmc;
 pub mod lun;
 pub mod netfn;
 pub mod request;

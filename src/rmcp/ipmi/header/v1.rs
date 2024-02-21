@@ -1,6 +1,6 @@
 use crate::err::{IpmiHeaderError, IpmiV1HeaderError};
 
-use super::ipmi_header::AuthType;
+use super::AuthType;
 
 #[derive(Clone, Copy, Debug)]
 pub struct IpmiV1Header {

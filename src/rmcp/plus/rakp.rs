@@ -1,10 +1,10 @@
 use crate::{
     commands::Privilege,
     err::IpmiPayloadError,
-    parser::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
-use super::rmcp_open_session::StatusCode;
+use super::open_session::StatusCode;
 
 #[derive(Clone, Debug)]
 pub enum Rakp {
@@ -42,13 +42,9 @@ impl From<RAKPMessage1> for Vec<u8> {
         result.extend([0x0, 0x0, 0x0]);
         result.extend(u32::to_le_bytes(val.managed_system_session_id));
         result.extend(u128::to_le_bytes(val.remote_console_random_number));
-        result.push({
-            ((val.inherit_role as u8) << 4) | (u8::from(val.requested_max_privilege) << 4 >> 4)
-            // let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-            // *bv.get_mut(3).unwrap() = val.inherit_role;
-            // bv[4..].store::<u8>(val.requested_max_privilege.into());
-            // bv[..].load::<u8>()
-        });
+        result.push(
+            ((val.inherit_role as u8) << 4) | (u8::from(val.requested_max_privilege) << 4 >> 4),
+        );
         result.extend([0x0, 0x0]);
         result.push(val.username_length);
         result.extend(val.username.into_bytes());

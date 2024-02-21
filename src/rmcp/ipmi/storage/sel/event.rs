@@ -1,4 +1,4 @@
-use crate::parser::lun::Lun;
+use crate::rmcp::lun::Lun;
 
 use super::constant::{SENSOR_GENERIC_EVENT_DESC, SENSOR_SPECIFIC_EVENT_DESC};
 

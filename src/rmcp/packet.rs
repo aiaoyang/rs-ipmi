@@ -1,11 +1,13 @@
 use crate::{
     err::PacketError,
-    helpers::utils::{aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256},
-    parser::{IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
+    rmcp::plus::crypto::{
+        aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256,
+    },
+    rmcp::{IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
 };
 
 use super::{
-    rakp::Rakp, request::ReqPayload, response::RespPayload, rmcp_open_session::RMCPPlusOpenSession,
+    open_session::RMCPPlusOpenSession, rakp::Rakp, request::ReqPayload, response::RespPayload,
 };
 
 #[derive(Clone, Debug)]
@@ -83,7 +85,6 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
         } else {
             payload_vec.extend_from_slice(&value.0[(nbytes - payload_length)..nbytes])
         }
-        // println!("Payload vec: {:x?}", payload_vec);
         Ok(Packet {
             rmcp_header: value.0[..4].try_into()?,
             ipmi_header,
@@ -139,7 +140,6 @@ impl Packet {
             let mut auth_code_input: Vec<u8> = header.into();
             let iv = generate_iv();
             auth_code_input.extend(&iv);
-            // println!("{:x?}", self.payload.clone().unwrap());
             let mut encrypted_payload = aes_128_cbc_encrypt(
                 (*k2)[..16].try_into().unwrap(), // aes 128 cbc wants the first 128 bits of k2 as the key
                 iv,
