@@ -1,7 +1,8 @@
 mod header;
-mod ipmi;
 mod packet;
 mod plus;
+
+pub mod ipmi;
 
 pub use header::RmcpHeader;
 pub use ipmi::NetFn;

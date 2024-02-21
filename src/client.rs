@@ -6,12 +6,12 @@ use std::{
 };
 
 use crate::{
-    commands::{
+    err::{IPMIClientError, PacketError},
+    rmcp::ipmi::commands::{
         AuthVersion, Command, GetChannelAuthCapabilitiesRequest,
         GetChannelAuthCapabilitiesResponse, GetChannelCipherSuitesRequest,
         GetChannelCipherSuitesResponse, Privilege,
     },
-    err::{IPMIClientError, PacketError},
     rmcp::{
         crypto::hash_hmac_sha_256,
         netfn::NetFn,

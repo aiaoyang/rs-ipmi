@@ -3,8 +3,8 @@ use std::fmt;
 // use bitvec::prelude::*;
 
 use crate::{
-    commands::Command,
     err::{IpmiPayloadError, IpmiPayloadRequestError},
+    rmcp::commands::Command,
 };
 
 use super::{

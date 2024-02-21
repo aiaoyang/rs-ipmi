@@ -1,5 +1,5 @@
 use crate::{
-    commands::Command,
+    rmcp::commands::Command,
     rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 

@@ -1,6 +1,6 @@
 use crate::{
-    commands::Privilege,
     err::IpmiPayloadError,
+    rmcp::commands::Privilege,
     rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 

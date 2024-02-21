@@ -1,9 +1,9 @@
 use crate::{
-    commands::Privilege,
     err::{
         AuthAlgorithmError, ConfidentialityAlgorithmError, IntegrityAlgorithmError,
         IpmiPayloadError,
     },
+    rmcp::commands::Privilege,
     rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 

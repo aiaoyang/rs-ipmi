@@ -1,6 +1,7 @@
 mod header;
 mod payload;
 
+pub mod commands;
 pub mod storage;
 
 pub use header::v1::*;
