@@ -9,19 +9,16 @@ use crate::{
 
 use super::{
     bmc::{AddrType, SlaveAddress, SoftwareType},
-    lun::Lun,
-    netfn::{NetFn, NetfnLun},
+    netfn::{NetfnLun, RqseqLun},
 };
 
 #[derive(Clone, Debug)]
 pub struct RespPayload {
     pub rq_addr: Address,
-    pub netfn: NetFn,
-    pub rq_lun: Lun,
+    pub netfn_rqlun: NetfnLun,
     // checksum 1
     pub rs_addr: Address,
-    pub rq_sequence: u8,
-    pub rs_lun: Lun,
+    pub rqseq_rslun: RqseqLun,
     pub command: Command,
     pub completion_code: CompletionCode,
     pub data: Option<Vec<u8>>,
@@ -38,9 +35,9 @@ impl fmt::Display for RespPayload {
             f,
             "IPMI Response:\n\tRequester Address: {}\n\tNetFn: {}\n\tResponder Address: {}\n\tRequester Sequence Number: {}\n\tCommand: {}\n\tCompletion Code: {}\n\tDate: {}",
             self.rq_addr,
-            self.netfn,
+            self.netfn_rqlun.netfn(),
             self.rs_addr,
-            self.rq_sequence,
+            self.rqseq_rslun.rqseq(),
             self.command,
             self.completion_code,
             data
@@ -56,14 +53,12 @@ impl TryFrom<&[u8]> for RespPayload {
             Err(IpmiPayloadRequestError::WrongLength)?
         }
         let netfn_rqlun = NetfnLun::from(value[1]);
-        let rqseq_rslun = NetfnLun::from(value[4]);
+        let rqseq_rslun = RqseqLun::from(value[4]);
         Ok(RespPayload {
             rq_addr: value[0].into(),
-            netfn: netfn_rqlun.netfn(),
-            rq_lun: netfn_rqlun.lun().unwrap(),
+            netfn_rqlun,
             rs_addr: value[3].into(),
-            rq_sequence: value[4],
-            rs_lun: rqseq_rslun.lun().unwrap(),
+            rqseq_rslun,
             command: value[5].into(),
             completion_code: value[6].into(),
             data: {

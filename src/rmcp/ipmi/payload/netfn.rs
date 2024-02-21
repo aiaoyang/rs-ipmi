@@ -20,6 +20,11 @@ impl From<u8> for CommandType {
 }
 
 pub type RqseqLun = NetfnLun;
+impl RqseqLun {
+    pub fn rqseq(&self) -> u8 {
+        self.0 >> 2
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetfnLun(pub u8);
