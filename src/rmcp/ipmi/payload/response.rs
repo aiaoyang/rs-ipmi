@@ -91,8 +91,8 @@ pub enum Address {
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Address::Slave(x) => write!(f, "{}", x),
-            Address::Software(x) => write!(f, "{}", x),
+            Address::Slave(x) => write!(f, "{:?}", x),
+            Address::Software(x) => write!(f, "{:?}", x),
         }
     }
 }
