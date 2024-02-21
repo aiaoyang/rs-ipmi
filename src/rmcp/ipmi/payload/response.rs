@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::{
     err::{IpmiPayloadError, IpmiPayloadRequestError},
-    rmcp::commands::Command,
+    rmcp::commands::CommandType,
 };
 
 use super::{
@@ -19,7 +19,7 @@ pub struct RespPayload {
     // checksum 1
     pub rs_addr: Address,
     pub rqseq_rslun: RqseqLun,
-    pub command: Command,
+    pub command: CommandType,
     pub completion_code: CompletionCode,
     pub data: Option<Vec<u8>>,
     // checksum 2

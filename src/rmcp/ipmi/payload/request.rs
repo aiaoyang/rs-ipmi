@@ -1,5 +1,5 @@
 use crate::{
-    rmcp::commands::Command,
+    rmcp::commands::CommandType,
     rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
 };
 
@@ -12,13 +12,13 @@ use super::{
 
 pub struct IpmiRawRequest {
     pub netfn: NetFn,
-    pub command_code: Command,
+    pub command_code: CommandType,
     pub data: Option<Vec<u8>>,
 }
 
 impl IpmiRawRequest {
     const PAYLOAD_LENGTH: u16 = 32;
-    pub fn new(netfn: NetFn, command_code: Command, data: Option<Vec<u8>>) -> IpmiRawRequest {
+    pub fn new(netfn: NetFn, command_code: CommandType, data: Option<Vec<u8>>) -> IpmiRawRequest {
         IpmiRawRequest {
             netfn,
             command_code,
@@ -54,7 +54,7 @@ pub struct ReqPayload {
     // checksum 1
     pub rq_addr: Address,
     pub rqseq_rqlun: RqseqLun,
-    pub command: Command,
+    pub command: CommandType,
     pub data: Option<Vec<u8>>,
     // checksum 2
 }
@@ -70,12 +70,16 @@ impl From<ReqPayload> for Vec<u8> {
         let checksum1 = checksum(&[rs_addr, val.netfn_rslun.0]);
         let rq_addr = REMOTE_SOFTWARE_ID;
         let command_code: u8 = (val.command).into();
-        result.push(rs_addr);
-        result.push(val.netfn_rslun.0);
-        result.push(checksum1);
-        result.push(rq_addr);
-        result.push(val.rqseq_rqlun.0);
-        result.push(command_code);
+
+        result.extend(&[
+            rs_addr,
+            val.netfn_rslun.0,
+            checksum1,
+            rq_addr,
+            val.rqseq_rqlun.0,
+            command_code,
+        ]);
+
         if let Some(data) = &val.data {
             result.extend(data);
         }
@@ -85,7 +89,7 @@ impl From<ReqPayload> for Vec<u8> {
 }
 
 impl ReqPayload {
-    pub fn new(net_fn: NetFn, command: Command, data: Option<Vec<u8>>) -> ReqPayload {
+    pub fn new(net_fn: NetFn, command: CommandType, data: Option<Vec<u8>>) -> ReqPayload {
         ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(net_fn.into(), Lun::Bmc.into()),
@@ -104,7 +108,7 @@ impl Default for ReqPayload {
             netfn_rslun: NetfnLun::new(NetFn::App.into(), Lun::Bmc.into()),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
             rqseq_rqlun: RqseqLun::new(0x00, Lun::Bmc.into()),
-            command: Command::GetChannelAuthCapabilities,
+            command: CommandType::GetChannelAuthCapabilities,
             data: None,
         }
     }

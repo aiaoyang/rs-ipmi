@@ -6,7 +6,7 @@ use crate::{
     rmcp::{
         netfn::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
     },
-    u8_ms_bit, Command,
+    u8_ms_bit, CommandType,
 };
 
 #[derive(Clone)]
@@ -56,7 +56,7 @@ impl GetChannelAuthCapabilitiesRequest {
             }),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
-                Command::GetChannelAuthCapabilities,
+                CommandType::GetChannelAuthCapabilities,
                 Some(self.clone().into()),
             )),
         )

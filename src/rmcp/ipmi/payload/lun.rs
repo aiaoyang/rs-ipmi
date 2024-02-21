@@ -1,5 +1,3 @@
-use std::fmt;
-
 use crate::err::LunError;
 
 #[derive(Clone, Debug, Copy, PartialEq)]
@@ -8,17 +6,6 @@ pub enum Lun {
     Oem1,
     Sms,
     Oem2,
-}
-
-impl fmt::Display for Lun {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Lun::Bmc => write!(f, "BMC"),
-            Lun::Oem1 => write!(f, "OEM1"),
-            Lun::Sms => write!(f, "SMS"),
-            Lun::Oem2 => write!(f, "OEM2"),
-        }
-    }
 }
 
 impl TryFrom<u8> for Lun {

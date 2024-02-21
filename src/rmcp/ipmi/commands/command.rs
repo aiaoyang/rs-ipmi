@@ -10,7 +10,7 @@ pub trait IpmiCommand: std::fmt::Display + for<'a> TryFrom<&'a [u8]> + Into<Vec<
 
 // pub const GET_CHANNEL_AUTH_CAPABILITIES: u8 = 0x38;
 #[derive(Clone, Copy, Debug)]
-pub enum Command {
+pub enum CommandType {
     Raw(u8),
     // *APP Commands*
     // Reserved,
@@ -78,34 +78,34 @@ pub enum Command {
     // FirmwareFirewallConfiguration,
 }
 
-impl fmt::Display for Command {
+impl fmt::Display for CommandType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Command::Raw(x) => write!(f, "Unknown: 0x{:X}", x),
-            Command::GetChannelAuthCapabilities => write!(f, "Get Channel Auth Capabilities"),
-            Command::SetSessionPrivilegeLevel => write!(f, "Set Session Privilege Level"),
-            Command::GetChannelCipherSuites => write!(f, "Get Channel Cipher Suites"),
+            CommandType::Raw(x) => write!(f, "Unknown: 0x{:X}", x),
+            CommandType::GetChannelAuthCapabilities => write!(f, "Get Channel Auth Capabilities"),
+            CommandType::SetSessionPrivilegeLevel => write!(f, "Set Session Privilege Level"),
+            CommandType::GetChannelCipherSuites => write!(f, "Get Channel Cipher Suites"),
         }
     }
 }
-impl From<u8> for Command {
+impl From<u8> for CommandType {
     fn from(val: u8) -> Self {
         match val {
-            0x38 => Command::GetChannelAuthCapabilities,
-            0x54 => Command::GetChannelCipherSuites,
-            0x3b => Command::SetSessionPrivilegeLevel,
-            x => Command::Raw(x),
+            0x38 => CommandType::GetChannelAuthCapabilities,
+            0x54 => CommandType::GetChannelCipherSuites,
+            0x3b => CommandType::SetSessionPrivilegeLevel,
+            x => CommandType::Raw(x),
         }
     }
 }
 
-impl From<Command> for u8 {
-    fn from(val: Command) -> Self {
+impl From<CommandType> for u8 {
+    fn from(val: CommandType) -> Self {
         match val {
-            Command::GetChannelAuthCapabilities => 0x38,
-            Command::GetChannelCipherSuites => 0x54,
-            Command::SetSessionPrivilegeLevel => 0x3b,
-            Command::Raw(x) => x,
+            CommandType::GetChannelAuthCapabilities => 0x38,
+            CommandType::GetChannelCipherSuites => 0x54,
+            CommandType::SetSessionPrivilegeLevel => 0x3b,
+            CommandType::Raw(x) => x,
         }
     }
 }

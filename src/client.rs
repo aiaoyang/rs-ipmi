@@ -8,7 +8,7 @@ use std::{
 use crate::{
     err::{IPMIClientError, PacketError},
     rmcp::ipmi::commands::{
-        AuthVersion, Command, GetChannelAuthCapabilitiesRequest,
+        AuthVersion, CommandType, GetChannelAuthCapabilitiesRequest,
         GetChannelAuthCapabilitiesResponse, GetChannelCipherSuitesRequest,
         GetChannelCipherSuitesResponse, Privilege,
     },
@@ -262,7 +262,7 @@ impl IPMIClient {
             .map_err(|_e: <T as TryInto<NetFn>>::Error| {
                 IPMIClientError::NetFnError(crate::err::NetFnError::UnknownNetFn(0))
             })?;
-        let command: Command = command_code.into();
+        let command: CommandType = command_code.into();
 
         let raw_request: Packet = match data.into() {
             None => IpmiRawRequest::new(netfn, command, None).create_packet(
@@ -417,10 +417,10 @@ impl IPMIClient {
     fn handle_completion_code(&mut self, payload: &RespPayload) -> Result<()> {
         match payload.completion_code {
             CompletionCode::CompletedNormally => match payload.command {
-                Command::GetChannelAuthCapabilities => {
+                CommandType::GetChannelAuthCapabilities => {
                     self.handle_channel_auth_capabilities(payload)?
                 }
-                Command::GetChannelCipherSuites => {
+                CommandType::GetChannelCipherSuites => {
                     while let AuthState::Discovery = self.auth_state {
                         self.cipher_list_index += 1;
                         self.handle_cipher_suites(payload.clone(), self.cipher_list_index)?;

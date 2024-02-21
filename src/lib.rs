@@ -37,7 +37,7 @@ mod rmcp;
 
 pub use client::IPMIClient;
 pub use err::IPMIClientError;
-pub use rmcp::ipmi::commands::Command;
+pub use rmcp::ipmi::commands::CommandType;
 pub use rmcp::response::CompletionCode;
 pub use rmcp::Entry;
 pub use rmcp::NetFn;
