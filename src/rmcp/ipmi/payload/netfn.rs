@@ -4,21 +4,6 @@ use crate::err::LunError;
 
 use super::lun::Lun;
 
-pub enum CommandType {
-    Request,
-    Response,
-}
-
-impl From<u8> for CommandType {
-    fn from(value: u8) -> Self {
-        if value % 2 == 0 {
-            CommandType::Request
-        } else {
-            CommandType::Response
-        }
-    }
-}
-
 pub type RqseqLun = NetfnLun;
 impl RqseqLun {
     pub fn rqseq(&self) -> u8 {
@@ -100,26 +85,18 @@ impl From<u8> for NetFn {
     }
 }
 
-impl NetFn {
-    pub fn to_u8(&self, command_type: CommandType) -> u8 {
-        match (self, command_type) {
-            (NetFn::Chassis, CommandType::Request) => 0x00,
-            (NetFn::Chassis, CommandType::Response) => 0x01,
-            (NetFn::Bridge, CommandType::Request) => 0x02,
-            (NetFn::Bridge, CommandType::Response) => 0x03,
-            (NetFn::SensorEvent, CommandType::Request) => 0x04,
-            (NetFn::SensorEvent, CommandType::Response) => 0x05,
-            (NetFn::App, CommandType::Request) => 0x06,
-            (NetFn::App, CommandType::Response) => 0x07,
-            (NetFn::Firmware, CommandType::Request) => 0x08,
-            (NetFn::Firmware, CommandType::Response) => 0x09,
-            (NetFn::Storage, CommandType::Request) => 0x0A,
-            (NetFn::Storage, CommandType::Response) => 0x0B,
-            (NetFn::Transport, CommandType::Request) => 0x0C,
-            (NetFn::Transport, CommandType::Response) => 0x0D,
-            (NetFn::Reserved, CommandType::Request) => 0x0E,
-            (NetFn::Reserved, CommandType::Response) => 0x2B,
-            (NetFn::Unknown(fn_code), _) => *fn_code,
+impl From<NetFn> for u8 {
+    fn from(value: NetFn) -> u8 {
+        match value {
+            NetFn::Chassis => 0x00,
+            NetFn::Bridge => 0x02,
+            NetFn::SensorEvent => 0x04,
+            NetFn::App => 0x06,
+            NetFn::Firmware => 0x08,
+            NetFn::Storage => 0x0A,
+            NetFn::Transport => 0x0C,
+            NetFn::Reserved => 0x0E,
+            NetFn::Unknown(fn_code) => fn_code,
         }
     }
 }
