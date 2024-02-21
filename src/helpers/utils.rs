@@ -1,18 +1,44 @@
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-use bitvec::prelude::*;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-pub fn join_two_bits_to_byte(first: u8, second: u8, split_index: usize) -> u8 {
-    let mut bv: BitVec<u8, Msb0> = bitvec![u8, Msb0; 0;8];
-    bv[..split_index].store::<u8>(first);
-    bv[split_index..].store::<u8>(second);
-    bv[..].load::<u8>()
+pub const fn u8_ms_bit(value: u8, index: u8) -> bool {
+    if index > 7 {
+        panic!("unsupported position")
+    }
+    (value << (index) >> 7) != 0
+}
+#[test]
+fn position() {
+    assert!(u8_ms_bit(0b1, 7));
+    assert!(!u8_ms_bit(0b1, 6));
+    assert!(!u8_ms_bit(0b10, 7));
+    assert!(u8_ms_bit(0b10, 6));
+
+    assert!(u8_ms_bit(0b1000_0000, 0));
+    assert!(!u8_ms_bit(0b1000_0000, 7));
 }
 
-pub fn get8bit_checksum(byte_array: &[u8]) -> u8 {
-    let answer: u8 = byte_array.iter().fold(0, |a, &b| a.wrapping_add(b));
-    255 - answer + 1
+/**
+ * @brief Ipmb misc
+ */
+// const IPMB_LUN_MASK: u8 = 0x03;
+
+// pub const fn ipmb_netfn_lun_set(netfn: u8, lun: u8) -> u8 {
+//     (netfn << 2) | (lun & IPMB_LUN_MASK)
+// }
+
+// pub const fn ipmb_seq_lun_set(netfn: u8, lun: u8) -> u8 {
+//     (netfn << 2) | (lun & IPMB_LUN_MASK)
+// }
+
+// two's complement sum
+pub fn checksum(input: &[u8]) -> u8 {
+    let mut res = 0_i32;
+    for val in input {
+        res += *val as i32
+    }
+    (-res) as u8
 }
 
 fn pad_payload_bytes(data: &mut Vec<u8>) -> Vec<u8> {
@@ -36,18 +62,16 @@ pub fn hash_hmac_sha_256(key: Vec<u8>, data: Vec<u8>) -> [u8; 32] {
     mac.update(data.as_slice());
     let result = mac.finalize();
     let mut vec_bytes = [0; 32];
-    let mut index = 0;
-    for i in result.into_bytes() {
+    for (index, i) in result.into_bytes().into_iter().enumerate() {
         vec_bytes[index] = i;
-        index += 1;
     }
     vec_bytes
 }
 
 pub fn generate_iv() -> [u8; 16] {
     let mut iv = [0; 16];
-    for i in 0..iv.len() {
-        iv[i] = rand::random::<u8>();
+    for value in &mut iv {
+        *value = rand::random::<u8>();
     }
     iv
 }
@@ -61,8 +85,8 @@ pub fn aes_128_cbc_encrypt(key: [u8; 16], iv: [u8; 16], mut payload_bytes: Vec<u
     // buffer must be big enough for padded plaintext
     let mut buf = [0u8; 48];
     let pt_len = plaintext.len();
-    buf[..pt_len].copy_from_slice(&plaintext);
-    let mut binding = buf.clone();
+    buf[..pt_len].copy_from_slice(plaintext);
+    let mut binding = buf;
     let ct = Aes128CbcEnc::new(&key.into(), &iv.into())
         .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut binding, pt_len)
         .unwrap();

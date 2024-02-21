@@ -9,9 +9,9 @@ pub enum PacketError {
     #[error("Failed to parse slice to Packet")]
     FailedToParse,
     #[error("Failed to parse slice to RMCP Header")]
-    RMCP(#[from] RMCPHeaderError),
+    Rmcp(#[from] RMCPHeaderError),
     #[error("Failed to parse slice to Ipmi Header")]
-    IPMI(#[from] IpmiHeaderError),
+    Ipmi(#[from] IpmiHeaderError),
     #[error("Failed to parse slice to Ipmi Header")]
     IPMIPayload(#[from] IpmiPayloadError),
 }
