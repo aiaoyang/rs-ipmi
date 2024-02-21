@@ -19,6 +19,8 @@ impl From<u8> for CommandType {
     }
 }
 
+pub type RqseqLun = NetfnLun;
+
 #[derive(Debug, Clone, Copy)]
 pub struct NetfnLun(pub u8);
 

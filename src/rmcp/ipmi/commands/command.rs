@@ -1,9 +1,17 @@
 use core::fmt;
 
+use crate::rmcp::netfn::NetfnLun;
+
+pub trait IpmiCommand: std::fmt::Display + for<'a> TryFrom<&'a [u8]> + Into<Vec<u8>> {
+    fn name(&self) -> &str;
+    fn code(&self) -> u8;
+    fn netfn_rslun(&self) -> NetfnLun;
+}
+
 // pub const GET_CHANNEL_AUTH_CAPABILITIES: u8 = 0x38;
 #[derive(Clone, Copy, Debug)]
 pub enum Command {
-    Unknown(u8),
+    Raw(u8),
     // *APP Commands*
     // Reserved,
     // GetDeviceId,
@@ -73,7 +81,7 @@ pub enum Command {
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Command::Unknown(x) => write!(f, "Unknown: 0x{:X}", x),
+            Command::Raw(x) => write!(f, "Unknown: 0x{:X}", x),
             Command::GetChannelAuthCapabilities => write!(f, "Get Channel Auth Capabilities"),
             Command::SetSessionPrivilegeLevel => write!(f, "Set Session Privilege Level"),
             Command::GetChannelCipherSuites => write!(f, "Get Channel Cipher Suites"),
@@ -86,7 +94,7 @@ impl From<u8> for Command {
             0x38 => Command::GetChannelAuthCapabilities,
             0x54 => Command::GetChannelCipherSuites,
             0x3b => Command::SetSessionPrivilegeLevel,
-            x => Command::Unknown(x),
+            x => Command::Raw(x),
         }
     }
 }
@@ -97,7 +105,7 @@ impl From<Command> for u8 {
             Command::GetChannelAuthCapabilities => 0x38,
             Command::GetChannelCipherSuites => 0x54,
             Command::SetSessionPrivilegeLevel => 0x3b,
-            Command::Unknown(x) => x,
+            Command::Raw(x) => x,
         }
     }
 }
