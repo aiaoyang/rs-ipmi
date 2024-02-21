@@ -10,7 +10,7 @@ fn main() {
         .send_raw_request_new(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
         .unwrap();
 
-    println!("resp: {}", resp);
+    println!("resp: {:?}", resp);
     if let Some(data) = resp.data {
         // println!("respdata: {:x?},len: {}", data, data.len());
         let entry = rust_ipmi::Entry::parse(&data[2..]).unwrap();
