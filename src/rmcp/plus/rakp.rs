@@ -1,8 +1,7 @@
 use crate::{
     err::IpmiPayloadError,
     rmcp::{
-        commands::Privilege, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType,
-        RmcpHeader,
+        commands::Privilege, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
     },
 };
 
@@ -59,7 +58,6 @@ impl From<RAKPMessage1> for Packet {
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                AuthType::RmcpPlus,
                 PayloadType::RAKP1,
                 (val.username_length + 28).into(),
             )),
@@ -159,7 +157,6 @@ impl From<RAKPMessage3> for Packet {
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                AuthType::RmcpPlus,
                 PayloadType::RAKP3,
                 match &val.key_exchange_auth_code {
                     None => 8_u16,

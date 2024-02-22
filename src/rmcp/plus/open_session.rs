@@ -4,8 +4,7 @@ use crate::{
         IpmiPayloadError,
     },
     rmcp::{
-        commands::Privilege, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType,
-        RmcpHeader,
+        commands::Privilege, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
     },
 };
 
@@ -143,7 +142,6 @@ impl From<RMCPPlusOpenSessionRequest> for Packet {
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                AuthType::RmcpPlus,
                 PayloadType::RcmpOpenSessionRequest,
                 32,
             )),

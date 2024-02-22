@@ -1,6 +1,4 @@
-use crate::rmcp::{
-    commands::Command, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
-};
+use crate::rmcp::{commands::Command, IpmiHeader, IpmiV2Header, Packet, Payload, RmcpHeader};
 
 use super::{
     bmc::{SlaveAddress, SoftwareType},
@@ -10,7 +8,7 @@ use super::{
 
 pub struct IpmiRawRequest {
     pub netfn: NetFn,
-    pub command_code: Command,
+    pub command: Command,
     pub data: Option<Vec<u8>>,
 }
 
@@ -18,25 +16,23 @@ impl IpmiRawRequest {
     const PAYLOAD_LENGTH: u16 = 32;
     pub fn new(
         netfn: impl Into<NetFn>,
-        command_code: impl Into<Command>,
+        command: impl Into<Command>,
         data: Option<Vec<u8>>,
     ) -> IpmiRawRequest {
         IpmiRawRequest {
             netfn: netfn.into(),
-            command_code: command_code.into(),
+            command: command.into(),
             data,
         }
     }
 
     pub fn create_packet(self, rmcp_plus_session_id: u32, session_seq_number: u32) -> Packet {
         let netfn = self.netfn;
-        let cmd = self.command_code;
+        let cmd = self.command;
         let data = self.data;
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_est(
-                AuthType::RmcpPlus,
-                PayloadType::Ipmi,
                 rmcp_plus_session_id,
                 session_seq_number,
                 Self::PAYLOAD_LENGTH,

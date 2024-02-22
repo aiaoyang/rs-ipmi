@@ -1,7 +1,7 @@
 use crate::err::IpmiPayloadError;
 use crate::rmcp::netfn_lun::NetFn;
 use crate::rmcp::request::ReqPayload;
-use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader};
+use crate::rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader};
 use crate::Command;
 
 #[derive(Clone)]
@@ -43,7 +43,6 @@ impl GetChannelCipherSuitesRequest {
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                AuthType::RmcpPlus,
                 PayloadType::Ipmi,
                 ((data_bytes.len() as u8) + 7).into(),
             )),
