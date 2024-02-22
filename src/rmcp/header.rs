@@ -27,29 +27,13 @@ impl TryFrom<&[u8]> for RmcpHeader {
     }
 }
 
-impl From<RmcpHeader> for Vec<u8> {
-    fn from(val: RmcpHeader) -> Self {
-        let result = [val.version, val.reserved, val.sequence_number, {
-            ((val.rmcp_ack as u8) << 6) | (u8::from(val.message_class))
-        }];
-        let mut vec_result = Vec::new();
-        vec_result.extend_from_slice(result.as_slice());
-        vec_result
+impl From<&RmcpHeader> for [u8; 4] {
+    fn from(val: &RmcpHeader) -> Self {
+        [val.version, val.reserved, val.sequence_number, {
+            ((val.rmcp_ack as u8) << 6) | (u8::from(&val.message_class))
+        }]
     }
 }
-
-// Doesn't apply....yet
-// impl RmcpHeader {
-//     pub fn new(version: u8, sequence_number: u8, message_class: MessageClass) -> RmcpHeader {
-//         RmcpHeader {
-//             version,
-//             reserved: 0x00,
-//             sequence_number,
-//             rmcp_ack: false,
-//             message_class,
-//         }
-//     }
-// }
 
 impl Default for RmcpHeader {
     fn default() -> RmcpHeader {
@@ -83,8 +67,8 @@ impl TryFrom<u8> for MessageClass {
     }
 }
 
-impl From<MessageClass> for u8 {
-    fn from(val: MessageClass) -> Self {
+impl From<&MessageClass> for u8 {
+    fn from(val: &MessageClass) -> Self {
         match val {
             MessageClass::Asf => 6,
             MessageClass::Ipmi => 7,

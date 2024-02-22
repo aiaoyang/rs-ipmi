@@ -113,8 +113,8 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
 impl From<Packet> for Vec<u8> {
     fn from(val: Packet) -> Self {
         let mut result = Vec::new();
-        result.append(&mut val.rmcp_header.into());
-        result.append(&mut val.ipmi_header.into());
+        result.extend(&<[u8; 4]>::from(&val.rmcp_header));
+        result.extend(&<Vec<u8>>::from(val.ipmi_header));
         match val.payload {
             Payload::None => {}
             a => result.append(&mut a.into()),
@@ -157,8 +157,8 @@ impl Packet {
             // hmac sha256-128 using k1 as key and auth_code input as input buffer
             let auth_code = &hash_hmac_sha_256(k1.into(), auth_code_input.clone()); // choose first 128 bits for sha256_128
 
-            encrypted_packet.append(&mut self.rmcp_header.clone().into());
-            encrypted_packet.append(&mut auth_code_input);
+            encrypted_packet.extend(&<[u8; 4]>::from(&self.rmcp_header));
+            encrypted_packet.extend(&auth_code_input);
             encrypted_packet.extend(&auth_code[..16]);
             Some(encrypted_packet)
         } else {
