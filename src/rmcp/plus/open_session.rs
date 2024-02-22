@@ -3,8 +3,10 @@ use crate::{
         AuthAlgorithmError, ConfidentialityAlgorithmError, IntegrityAlgorithmError,
         IpmiPayloadError,
     },
-    rmcp::commands::Privilege,
-    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+    rmcp::{
+        commands::Privilege, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType,
+        RmcpHeader,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -139,16 +141,13 @@ impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
 impl From<RMCPPlusOpenSessionRequest> for Packet {
     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
         Packet::new(
-            IpmiHeader::V2_0(IpmiV2Header::new(
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_pre(
                 AuthType::RmcpPlus,
-                false,
-                false,
                 PayloadType::RcmpOpenSessionRequest,
-                0,
-                0,
                 32,
             )),
-            Payload::Rmcp(RMCPPlusOpenSession::Request(val.clone())),
+            Payload::Rmcp(RMCPPlusOpenSession::Request(val)),
         )
     }
 }

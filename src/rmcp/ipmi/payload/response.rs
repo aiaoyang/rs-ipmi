@@ -21,7 +21,7 @@ pub struct RespPayload {
     pub rqseq_rslun: RqseqLun,
     pub command: Command,
     pub completion_code: CompletionCode,
-    pub data: Option<Vec<u8>>,
+    pub data: Vec<u8>,
     // checksum 2
 }
 
@@ -64,9 +64,9 @@ impl TryFrom<&[u8]> for RespPayload {
             data: {
                 let len = value.len() - 1;
                 if len == 7 {
-                    None
+                    Vec::new()
                 } else {
-                    Some(value[7..len].into())
+                    value[7..len].into()
                 }
             },
         })
@@ -75,9 +75,10 @@ impl TryFrom<&[u8]> for RespPayload {
 
 impl RespPayload {
     pub fn payload_length(&self) -> usize {
-        match &self.data {
-            Some(d) => d.len() + 8,
-            None => 8,
+        if self.data.is_empty() {
+            8
+        } else {
+            self.data.len() + 8
         }
     }
 }

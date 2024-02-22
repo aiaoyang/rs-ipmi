@@ -14,7 +14,7 @@ use super::{
 pub struct Packet {
     pub rmcp_header: RmcpHeader,
     pub ipmi_header: IpmiHeader,
-    pub payload: Option<Payload>,
+    pub payload: Payload,
 }
 
 impl TryFrom<&[u8]> for Packet {
@@ -34,20 +34,18 @@ impl TryFrom<&[u8]> for Packet {
             ipmi_header,
             payload: {
                 match payload_length {
-                    0 => None,
+                    0 => Payload::None,
                     _ => match ipmi_header.payload_type() {
-                        PayloadType::Ipmi => {
-                            Some(Payload::IpmiResp(payload_vec.as_slice().try_into()?))
-                        }
-                        PayloadType::RcmpOpenSessionResponse => Some(Payload::Rmcp(
+                        PayloadType::Ipmi => Payload::IpmiResp(payload_vec.as_slice().try_into()?),
+                        PayloadType::RcmpOpenSessionResponse => Payload::Rmcp(
                             RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
-                        )),
-                        PayloadType::RAKP2 => Some(Payload::Rakp(Rakp::Message2(
-                            payload_vec.as_slice().try_into()?,
-                        ))),
-                        PayloadType::RAKP4 => Some(Payload::Rakp(Rakp::Message4(
-                            payload_vec.as_slice().try_into()?,
-                        ))),
+                        ),
+                        PayloadType::RAKP2 => {
+                            Payload::Rakp(Rakp::Message2(payload_vec.as_slice().try_into()?))
+                        }
+                        PayloadType::RAKP4 => {
+                            Payload::Rakp(Rakp::Message4(payload_vec.as_slice().try_into()?))
+                        }
                         _ => unreachable!(),
                     },
                 }
@@ -90,22 +88,21 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
             ipmi_header,
             payload: {
                 match payload_length {
-                    0 => None,
+                    0 => Payload::None,
                     _ => match ipmi_header.payload_type() {
-                        PayloadType::Ipmi => Some(Payload::IpmiResp(RespPayload::try_from(
-                            payload_vec.as_slice(),
-                        )?)),
-                        PayloadType::RcmpOpenSessionRequest => todo!(),
-                        PayloadType::RcmpOpenSessionResponse => Some(Payload::Rmcp(
+                        PayloadType::Ipmi => {
+                            Payload::IpmiResp(RespPayload::try_from(payload_vec.as_slice())?)
+                        }
+                        PayloadType::RcmpOpenSessionResponse => Payload::Rmcp(
                             RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
-                        )),
-                        PayloadType::RAKP2 => Some(Payload::Rakp(Rakp::Message2(
-                            payload_vec.as_slice().try_into()?,
-                        ))),
-                        PayloadType::RAKP4 => Some(Payload::Rakp(Rakp::Message4(
-                            payload_vec.as_slice().try_into()?,
-                        ))),
-                        _ => todo!(),
+                        ),
+                        PayloadType::RAKP2 => {
+                            Payload::Rakp(Rakp::Message2(payload_vec.as_slice().try_into()?))
+                        }
+                        PayloadType::RAKP4 => {
+                            Payload::Rakp(Rakp::Message4(payload_vec.as_slice().try_into()?))
+                        }
+                        _ => unreachable!(),
                     },
                 }
             },
@@ -118,20 +115,20 @@ impl From<Packet> for Vec<u8> {
         let mut result = Vec::new();
         result.append(&mut val.rmcp_header.into());
         result.append(&mut val.ipmi_header.into());
-        match &val.payload {
-            None => {}
-            Some(a) => result.append(&mut a.clone().into()),
+        match val.payload {
+            Payload::None => {}
+            a => result.append(&mut a.into()),
         }
         result
     }
 }
 
 impl Packet {
-    pub fn new(ipmi_header: IpmiHeader, payload: Payload) -> Packet {
+    pub fn new(rmcp_header: RmcpHeader, ipmi_header: IpmiHeader, payload: Payload) -> Packet {
         Packet {
-            rmcp_header: RmcpHeader::default(),
+            rmcp_header,
             ipmi_header,
-            payload: Some(payload),
+            payload,
         }
     }
     pub fn to_encrypted_bytes(&self, k1: &[u8; 32], k2: &[u8; 32]) -> Option<Vec<u8>> {
@@ -143,7 +140,7 @@ impl Packet {
             let mut encrypted_payload = aes_128_cbc_encrypt(
                 (*k2)[..16].try_into().unwrap(), // aes 128 cbc wants the first 128 bits of k2 as the key
                 iv,
-                self.payload.clone().unwrap().into(),
+                self.payload.clone().into(),
             );
             auth_code_input.append(&mut encrypted_payload);
 
@@ -175,7 +172,7 @@ impl Default for Packet {
         Self {
             rmcp_header: RmcpHeader::default(),
             ipmi_header: IpmiHeader::V1_5(IpmiV1Header::default()),
-            payload: None,
+            payload: Payload::None,
         }
     }
 }
@@ -185,6 +182,7 @@ pub enum Payload {
     IpmiReq(ReqPayload),
     Rmcp(RMCPPlusOpenSession),
     Rakp(Rakp),
+    None,
 }
 
 impl From<Payload> for Vec<u8> {
@@ -194,6 +192,7 @@ impl From<Payload> for Vec<u8> {
             Payload::Rakp(payload) => payload.into(),
             Payload::IpmiResp(_) => unreachable!(),
             Payload::IpmiReq(payload) => payload.into(),
+            Payload::None => Vec::new(),
         }
     }
 }

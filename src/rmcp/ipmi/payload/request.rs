@@ -1,6 +1,5 @@
-use crate::{
-    rmcp::commands::Command,
-    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+use crate::rmcp::{
+    commands::Command, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
 };
 
 use super::{
@@ -18,33 +17,30 @@ pub struct IpmiRawRequest {
 impl IpmiRawRequest {
     const PAYLOAD_LENGTH: u16 = 32;
     pub fn new(
-        netfn: NetFn,
+        netfn: impl Into<NetFn>,
         command_code: impl Into<Command>,
         data: Option<Vec<u8>>,
     ) -> IpmiRawRequest {
         IpmiRawRequest {
-            netfn,
+            netfn: netfn.into(),
             command_code: command_code.into(),
             data,
         }
     }
 
-    pub fn create_packet(&self, rmcp_plus_session_id: u32, session_seq_number: u32) -> Packet {
+    pub fn create_packet(self, rmcp_plus_session_id: u32, session_seq_number: u32) -> Packet {
         let netfn = self.netfn;
         let cmd = self.command_code;
-        let data = self.data.clone();
+        let data = self.data;
         Packet::new(
-            IpmiHeader::V2_0(IpmiV2Header {
-                auth_type: AuthType::RmcpPlus,
-                payload_enc: true,
-                payload_auth: true,
-                payload_type: PayloadType::Ipmi,
-                oem_iana: None,
-                oem_payload_id: None,
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_est(
+                AuthType::RmcpPlus,
+                PayloadType::Ipmi,
                 rmcp_plus_session_id,
                 session_seq_number,
-                payload_length: Self::PAYLOAD_LENGTH,
-            }),
+                Self::PAYLOAD_LENGTH,
+            )),
             Payload::IpmiReq(ReqPayload::new(netfn, cmd, data)),
         )
     }

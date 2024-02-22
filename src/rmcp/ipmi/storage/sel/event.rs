@@ -62,6 +62,48 @@ impl EventType {
             EventType::Unknown(_) | EventType::Unspecified(_) => "other unknown",
         }
     }
+
+    pub fn data_to_u32(
+        &self,
+        sensor_type: impl Into<u8> + std::marker::Copy,
+        data: [u8; 3],
+    ) -> u32 {
+        match self {
+            EventType::Threshold(event_type) | EventType::Generic(event_type) => {
+                let offset = data[0] & 0x0f;
+                (*event_type as u32) << 8 | offset as u32
+            }
+            EventType::SensorSpecific(_) => {
+                let d1: u8 = data[0];
+                let mut d2: u8 = if d1 & 0xc0 != 0 { data[1] } else { 0xff };
+                let mut d3: u8 = if d1 & 0x30 != 0 { data[2] } else { 0xff };
+                let offset = d1 & 0x0f;
+
+                for _ in 0..2 {
+                    if SENSOR_SPECIFIC_EVENT_DESC
+                        .get(
+                            &((sensor_type.into() as u32) << 24
+                                | (offset as u32) << 16
+                                | (d2 as u32) << 8
+                                | (d3 as u32)),
+                        )
+                        .is_some()
+                    {
+                        return (sensor_type.into() as u32) << 24
+                            | (offset as u32) << 16
+                            | (d2 as u32) << 8
+                            | (d3 as u32);
+                    }
+                    if d2 != 0xff || d3 != 0xff {
+                        (d2, d3) = (0xff, 0xff);
+                    }
+                }
+                0
+            }
+            EventType::Oem(oem) => *oem as u32,
+            EventType::Unknown(v) | EventType::Unspecified(v) => *v as u32,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

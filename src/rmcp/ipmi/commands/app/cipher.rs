@@ -1,7 +1,7 @@
 use crate::err::IpmiPayloadError;
 use crate::rmcp::netfn_lun::NetFn;
 use crate::rmcp::request::ReqPayload;
-use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType};
+use crate::rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader};
 use crate::Command;
 
 #[derive(Clone)]
@@ -37,21 +37,16 @@ impl GetChannelCipherSuitesRequest {
         }
     }
 
-    pub fn create_packet(&self) -> Packet {
-        let data_bytes: Vec<u8> = self.clone().into();
+    pub fn create_packet(self) -> Packet {
+        let data_bytes: Vec<u8> = self.into();
 
         Packet::new(
-            IpmiHeader::V2_0(IpmiV2Header {
-                auth_type: AuthType::RmcpPlus,
-                payload_enc: false,
-                payload_auth: false,
-                payload_type: PayloadType::Ipmi,
-                oem_iana: None,
-                oem_payload_id: None,
-                rmcp_plus_session_id: 0x0,
-                session_seq_number: 0x0,
-                payload_length: ((data_bytes.len() as u8) + 7).into(),
-            }),
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_pre(
+                AuthType::RmcpPlus,
+                PayloadType::Ipmi,
+                ((data_bytes.len() as u8) + 7).into(),
+            )),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelCipherSuites,

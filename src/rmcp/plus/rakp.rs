@@ -1,7 +1,9 @@
 use crate::{
     err::IpmiPayloadError,
-    rmcp::commands::Privilege,
-    rmcp::{AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType},
+    rmcp::{
+        commands::Privilege, AuthType, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType,
+        RmcpHeader,
+    },
 };
 
 use super::open_session::StatusCode;
@@ -55,13 +57,10 @@ impl From<RAKPMessage1> for Vec<u8> {
 impl From<RAKPMessage1> for Packet {
     fn from(val: RAKPMessage1) -> Self {
         Packet::new(
-            IpmiHeader::V2_0(IpmiV2Header::new(
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_pre(
                 AuthType::RmcpPlus,
-                false,
-                false,
                 PayloadType::RAKP1,
-                0x0,
-                0x0,
                 (val.username_length + 28).into(),
             )),
             Payload::Rakp(Rakp::Message1(val.clone())),
@@ -158,21 +157,16 @@ impl From<RAKPMessage3> for Vec<u8> {
 impl From<RAKPMessage3> for Packet {
     fn from(val: RAKPMessage3) -> Self {
         Packet::new(
-            IpmiHeader::V2_0(IpmiV2Header::new(
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_pre(
                 AuthType::RmcpPlus,
-                false,
-                false,
                 PayloadType::RAKP3,
-                0x0,
-                0x0,
-                {
-                    match &val.key_exchange_auth_code {
-                        None => 8_u16,
-                        Some(auth_code) => (auth_code.len() + 8) as u16,
-                    }
+                match &val.key_exchange_auth_code {
+                    None => 8_u16,
+                    Some(auth_code) => (auth_code.len() + 8) as u16,
                 },
             )),
-            Payload::Rakp(Rakp::Message3(val.clone())),
+            Payload::Rakp(Rakp::Message3(val)),
         )
     }
 }

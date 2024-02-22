@@ -120,6 +120,34 @@ impl From<IpmiV2Header> for Vec<u8> {
 }
 
 impl IpmiV2Header {
+    pub fn new_est(
+        auth_type: AuthType,
+        payload_type: PayloadType,
+        rmcp_plus_session_id: u32,
+        session_seq_number: u32,
+        payload_length: u16,
+    ) -> IpmiV2Header {
+        Self::new(
+            auth_type,
+            true,
+            true,
+            payload_type,
+            rmcp_plus_session_id,
+            session_seq_number,
+            payload_length,
+        )
+    }
+    pub fn new_pre(auth_type: AuthType, payload_type: PayloadType, payload_length: u16) -> Self {
+        Self::new(
+            auth_type,
+            false,
+            false,
+            payload_type,
+            0x0,
+            0x0,
+            payload_length,
+        )
+    }
     pub fn new(
         auth_type: AuthType,
         payload_enc: bool,

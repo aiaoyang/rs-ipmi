@@ -129,7 +129,7 @@ impl std::fmt::Display for Entry {
                 event_type,
                 event_data,
             } => {
-                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type:?}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data",event_type.description(sensor_type, *event_data)))
+                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type:?}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data: 0b{:b}",event_type.description(sensor_type, *event_data),event_type.data_to_u32(sensor_type, *event_data)))
             }
             _ => f.write_fmt(format_args!("{self:?}"))
         }

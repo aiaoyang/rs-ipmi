@@ -5,6 +5,7 @@ use crate::{
     err::{IpmiPayloadError, ParseError, PrivilegeError},
     rmcp::{
         netfn_lun::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
+        RmcpHeader,
     },
     u8_ms_bit, Command,
 };
@@ -39,14 +40,15 @@ impl GetChannelAuthCapabilitiesRequest {
     }
 
     pub fn create_packet(
-        &self,
+        self,
         auth_type: AuthType,
         session_seq_number: u32,
         session_id: u32,
         auth_code: Option<u128>,
     ) -> Packet {
-        let data_bytes: Vec<u8> = self.clone().into();
+        let data_bytes: Vec<u8> = self.into();
         Packet::new(
+            RmcpHeader::default(),
             IpmiHeader::V1_5(IpmiV1Header {
                 auth_type,
                 session_seq_number,
@@ -57,7 +59,7 @@ impl GetChannelAuthCapabilitiesRequest {
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelAuthCapabilities,
-                Some(self.clone().into()),
+                Some(data_bytes),
             )),
         )
     }
