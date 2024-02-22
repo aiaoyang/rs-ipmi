@@ -25,7 +25,11 @@ impl From<u8> for EventType {
 }
 
 impl EventType {
-    pub fn description(&self, sensor_type: u8, data: [u8; 3]) -> &'static str {
+    pub fn description(
+        &self,
+        sensor_type: impl Into<u8> + std::marker::Copy,
+        data: [u8; 3],
+    ) -> &'static str {
         match self {
             EventType::Threshold(event_type) | EventType::Generic(event_type) => {
                 let offset = data[0] & 0x0f;
@@ -41,13 +45,14 @@ impl EventType {
 
                 for _ in 0..2 {
                     if let Some(desc) = SENSOR_SPECIFIC_EVENT_DESC.get(
-                        &((sensor_type as u32) << 24
+                        &((sensor_type.into() as u32) << 24
                             | (offset as u32) << 16
                             | (d2 as u32) << 8
                             | (d3 as u32)),
                     ) {
                         return desc;
-                    } else if d2 != 0xff || d3 != 0xff {
+                    }
+                    if d2 != 0xff || d3 != 0xff {
                         (d2, d3) = (0xff, 0xff);
                     }
                 }

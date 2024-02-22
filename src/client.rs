@@ -350,7 +350,6 @@ impl IPMIClient {
     }
 
     fn send_packet(&mut self, request_packet: Packet) -> Result<Packet> {
-        println!("packet: {request_packet:#?}");
         match self.auth_state {
             AuthState::Established => {
                 self.client_socket
@@ -423,7 +422,6 @@ impl IPMIClient {
                 _ => return Ok(()),
             },
             _ => {
-                println!("{:?}", payload.completion_code);
                 return Ok(());
             }
         }

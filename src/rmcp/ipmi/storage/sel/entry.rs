@@ -1,3 +1,5 @@
+use crate::rmcp::storage::sdr::sensor::SensorType;
+
 use super::{
     event::{EventDirection, EventGenerator, EventMessageRevision, EventType},
     timestamp::Timestamp,
@@ -32,7 +34,7 @@ pub enum Entry {
         timestamp: Timestamp,
         generator_id: EventGenerator,
         event_message_format: EventMessageRevision,
-        sensor_type: u8,
+        sensor_type: SensorType,
         sensor_number: u8,
         event_direction: EventDirection,
         event_type: EventType,
@@ -86,7 +88,7 @@ impl Entry {
                     timestamp: Timestamp::from(timestamp),
                     generator_id,
                     event_message_format,
-                    sensor_type,
+                    sensor_type: sensor_type.into(),
                     sensor_number,
                     event_direction,
                     event_type: event_type.into(),
@@ -127,7 +129,7 @@ impl std::fmt::Display for Entry {
                 event_type,
                 event_data,
             } => {
-                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data",event_type.description(*sensor_type, *event_data)))
+                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type:?}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data",event_type.description(sensor_type, *event_data)))
             }
             _ => f.write_fmt(format_args!("{self:?}"))
         }
