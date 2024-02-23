@@ -9,6 +9,8 @@ use super::{
 pub enum ParseError {
     #[error("Length of slice should be 4 bytes")]
     WrongLength,
+    #[error("unknown completion code")]
+    UnknownCompletionCode,
     #[error("Failed to parse slice to rmcp header")]
     FailedToParse,
     #[error("Unsupported Message class {0}")]

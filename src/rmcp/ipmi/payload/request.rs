@@ -1,9 +1,9 @@
-use crate::rmcp::{commands::Command, IpmiHeader, IpmiV2Header, Packet, Payload, RmcpHeader};
-
-use super::{
-    bmc::{SlaveAddress, SoftwareType},
-    netfn_lun::{Lun, NetFn, NetfnLun, RqseqLun},
-    response::Address,
+use crate::{
+    rmcp::{
+        commands::Command, Address, IpmiHeader, IpmiV2Header, Lun, NetfnLun, Packet, Payload,
+        RmcpHeader, SlaveAddress, SoftwareType,
+    },
+    NetFn,
 };
 
 pub struct IpmiRawRequest {
@@ -48,7 +48,7 @@ pub struct ReqPayload {
     pub netfn_rslun: NetfnLun,
     // checksum 1
     pub rq_addr: Address,
-    pub rqseq_rqlun: RqseqLun,
+    pub rqseq_rqlun: NetfnLun,
     pub command: Command,
     pub data: Option<Vec<u8>>,
     // checksum 2
@@ -89,7 +89,7 @@ impl ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
-            rqseq_rqlun: RqseqLun::new(0x08, Lun::Bmc),
+            rqseq_rqlun: NetfnLun::new(0x08, Lun::Bmc),
             command,
             data,
         }
@@ -102,7 +102,7 @@ impl Default for ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(NetFn::App, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
-            rqseq_rqlun: RqseqLun::new(0x00, Lun::Bmc),
+            rqseq_rqlun: NetfnLun::new(0x00, Lun::Bmc),
             command: Command::GetChannelAuthCapabilities,
             data: None,
         }

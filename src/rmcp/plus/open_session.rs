@@ -142,7 +142,7 @@ impl From<RMCPPlusOpenSessionRequest> for Packet {
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                PayloadType::RcmpOpenSessionRequest,
+                PayloadType::RmcpOpenSessionRequest,
                 32,
             )),
             Payload::Rmcp(RMCPPlusOpenSession::Request(val)),

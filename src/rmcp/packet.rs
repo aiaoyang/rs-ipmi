@@ -37,7 +37,7 @@ impl TryFrom<&[u8]> for Packet {
                     0 => Payload::None,
                     _ => match ipmi_header.payload_type() {
                         PayloadType::Ipmi => Payload::IpmiResp(payload_vec.as_slice().try_into()?),
-                        PayloadType::RcmpOpenSessionResponse => Payload::Rmcp(
+                        PayloadType::RmcpOpenSessionResponse => Payload::Rmcp(
                             RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
                         ),
                         PayloadType::RAKP2 => {
@@ -93,7 +93,7 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
                         PayloadType::Ipmi => {
                             Payload::IpmiResp(RespPayload::try_from(payload_vec.as_slice())?)
                         }
-                        PayloadType::RcmpOpenSessionResponse => Payload::Rmcp(
+                        PayloadType::RmcpOpenSessionResponse => Payload::Rmcp(
                             RMCPPlusOpenSession::Response(payload_vec.as_slice().try_into()?),
                         ),
                         PayloadType::RAKP2 => {

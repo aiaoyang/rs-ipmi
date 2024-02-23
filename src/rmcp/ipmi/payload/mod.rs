@@ -1,9 +1,6 @@
 pub mod bmc;
-pub mod netfn_lun;
 pub mod request;
 pub mod response;
-
-pub use netfn_lun::{Lun, NetFn};
 
 // request
 // +--------------------+

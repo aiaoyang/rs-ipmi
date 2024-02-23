@@ -3,11 +3,8 @@ use std::fmt::Debug;
 
 use crate::{
     err::{IpmiPayloadError, ParseError, PrivilegeError},
-    rmcp::{
-        netfn_lun::NetFn, request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload,
-        RmcpHeader,
-    },
-    u8_ms_bit, Command,
+    rmcp::{request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload, RmcpHeader},
+    u8_ms_bit, Command, NetFn,
 };
 
 #[derive(Clone)]
