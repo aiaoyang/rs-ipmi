@@ -29,21 +29,18 @@ use rust_ipmi::{IPMIClient, NetFn};
 
 fn main() {
     // create the client for the server you want to execute IPMI commands against
-    let mut client: IPMIClient =
-        IPMIClient::new("192.168.88.10:623").expect("Failed to create ipmi client");
+    let client_inactived = IPMIClient::new("192.168.1.100:623").unwrap();
+    let mut client_actived = client_inactived
+        .activate("admin", "admin")
+        .map_err(|e| println!("{e:?}"))
+        .unwrap();
 
-    // establish a session with the BMC using the credentials specified
-    client
-        .establish_connection("billybob123", "superpassword")
-        .expect("Failed to establish the session with the BMC");
-     
-    // send a command to the BMC using raw values
-    let response = client.send_raw_request(NetFn::App, 0x3b, Some(vec![0x04]));
+    let resp = client_actived
+        // get first sel record raw command
+        .send_raw_request(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
+        .unwrap();
 
-    match response {
-        Err(err) => println!("Failed to send the raw request; err = {:?}", err),
-        Ok(n) => println!("{}", n), // print the response
-    }
+    println!("resp: {:?}", resp);
 }
 ```
 
