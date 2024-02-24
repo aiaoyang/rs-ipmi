@@ -20,7 +20,7 @@ impl From<Rakp> for Vec<u8> {
         match val {
             Rakp::Message1(payload) => payload.into(),
             Rakp::Message3(payload) => payload.into(),
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 }

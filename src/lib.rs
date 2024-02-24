@@ -37,10 +37,12 @@ mod rmcp;
 
 pub use client::IPMIClient;
 pub use err::IPMIClientError;
-pub use rmcp::ipmi::commands::Command;
+pub use rmcp::ipmi::commands::*;
 pub use rmcp::ipmi::CompletionCode;
-pub use rmcp::NetFn;
-pub use rmcp::{Entry, EventType};
+pub use rmcp::{
+    EventType, IpmiCommand, IpmiHeader, IpmiV1Header, IpmiV2Header, NetFn, Packet, RmcpHeader,
+    SelEntry,
+};
 
 pub const fn u8_ms_bit(value: u8, index: u8) -> bool {
     if index > 7 {

@@ -9,7 +9,7 @@ use crate::{
 pub struct IpmiRawRequest {
     pub netfn: NetFn,
     pub command: Command,
-    pub data: Option<Vec<u8>>,
+    pub data: Vec<u8>,
 }
 
 impl IpmiRawRequest {
@@ -17,7 +17,7 @@ impl IpmiRawRequest {
     pub fn new(
         netfn: impl Into<NetFn>,
         command: impl Into<Command>,
-        data: Option<Vec<u8>>,
+        data: Vec<u8>,
     ) -> IpmiRawRequest {
         IpmiRawRequest {
             netfn: netfn.into(),
@@ -26,17 +26,13 @@ impl IpmiRawRequest {
         }
     }
 
-    pub fn create_packet(self, rmcp_plus_session_id: u32, session_seq_number: u32) -> Packet {
+    pub fn create_packet(self) -> Packet {
         let netfn = self.netfn;
         let cmd = self.command;
         let data = self.data;
         Packet::new(
             RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_est(
-                rmcp_plus_session_id,
-                session_seq_number,
-                Self::PAYLOAD_LENGTH,
-            )),
+            IpmiHeader::V2_0(IpmiV2Header::new_est(Self::PAYLOAD_LENGTH)),
             Payload::IpmiReq(ReqPayload::new(netfn, cmd, data)),
         )
     }
@@ -50,7 +46,7 @@ pub struct ReqPayload {
     pub rq_addr: Address,
     pub rqseq_rqlun: NetfnLun,
     pub command: Command,
-    pub data: Option<Vec<u8>>,
+    pub data: Vec<u8>,
     // checksum 2
 }
 
@@ -75,16 +71,14 @@ impl From<ReqPayload> for Vec<u8> {
             command_code,
         ]);
 
-        if let Some(data) = &val.data {
-            result.extend(data);
-        }
+        result.extend(&val.data);
         result.push(checksum(&result[3..]));
         result
     }
 }
 
 impl ReqPayload {
-    pub fn new(net_fn: NetFn, command: Command, data: Option<Vec<u8>>) -> ReqPayload {
+    pub fn new(net_fn: NetFn, command: Command, data: Vec<u8>) -> ReqPayload {
         ReqPayload {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
@@ -104,7 +98,7 @@ impl Default for ReqPayload {
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
             rqseq_rqlun: NetfnLun::new(0x00, Lun::Bmc),
             command: Command::GetChannelAuthCapabilities,
-            data: None,
+            data: Vec::new(),
         }
     }
 }

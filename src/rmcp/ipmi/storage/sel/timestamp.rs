@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Timestamp(u32);
 
 impl core::fmt::Display for Timestamp {

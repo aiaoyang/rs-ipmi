@@ -1,9 +1,10 @@
 use crate::{
     err::PacketError,
-    rmcp::plus::crypto::{
-        aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256,
+    rmcp::{
+        plus::crypto::{aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256},
+        IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader,
     },
-    rmcp::{IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
+    IpmiV2Header,
 };
 
 use super::{
@@ -131,6 +132,28 @@ impl Packet {
             payload,
         }
     }
+
+    pub(crate) fn set_session_id(&mut self, id: u32) {
+        if let IpmiHeader::V2_0(IpmiV2Header {
+            rmcp_plus_session_id,
+            // session_seq_number,
+            ..
+        }) = &mut self.ipmi_header
+        {
+            *rmcp_plus_session_id = id;
+        }
+    }
+
+    pub(crate) fn set_session_seq_num(&mut self, seq_num: u32) {
+        if let IpmiHeader::V2_0(IpmiV2Header {
+            // rmcp_plus_session_id,
+            session_seq_number,
+            ..
+        }) = &mut self.ipmi_header
+        {
+            *session_seq_number = seq_num;
+        }
+    }
     pub fn to_encrypted_bytes(&self, k1: &[u8; 32], k2: &[u8; 32]) -> Option<Vec<u8>> {
         if let IpmiHeader::V2_0(header) = self.ipmi_header {
             let mut encrypted_packet: Vec<u8> = Vec::new();
@@ -183,6 +206,16 @@ pub enum Payload {
     Rmcp(RMCPPlusOpenSession),
     Rakp(Rakp),
     None,
+}
+
+impl Payload {
+    pub fn data(&self) -> &[u8] {
+        if let Payload::IpmiResp(RespPayload { data, .. }) = self {
+            data
+        } else {
+            &[]
+        }
+    }
 }
 
 impl From<Payload> for Vec<u8> {

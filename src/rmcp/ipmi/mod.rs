@@ -5,22 +5,26 @@ pub mod commands;
 pub mod raw;
 pub mod storage;
 
+use std::fmt;
+
 pub use header::v1::*;
 pub use header::v2::*;
 pub use header::*;
 pub use payload::*;
-pub use storage::sel::{event::EventType, Entry};
+pub use storage::sel::{event::EventType, Entry as SelEntry};
 
 use crate::err::LunError;
 use crate::err::ParseError;
 use crate::Command;
 
+use super::Payload;
+
 pub trait IpmiCommand {
-    type Output<'a>;
-    type Error;
+    type Output;
+    type Error: fmt::Debug;
     fn netfn(&self) -> NetFn;
     fn commnad(&self) -> Command;
-    fn to_vec(self) -> Vec<u8>;
+    fn payload(self) -> Payload;
 
     fn check_cc_success(cc: CompletionCode) -> Result<(), ParseError> {
         if cc.is_success() {
@@ -29,10 +33,10 @@ pub trait IpmiCommand {
             Err(crate::err::ParseError::UnknownCompletionCode)
         }
     }
-    fn parse(data: &[u8]) -> Result<Self::Output<'_>, Self::Error>;
+    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum CompletionCode {
     CompletedNormally,
     NodeBusy,
@@ -211,7 +215,7 @@ impl From<NetFn> for u8 {
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy)]
 pub enum Lun {
     Bmc,
     Oem1,

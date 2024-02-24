@@ -21,9 +21,9 @@ use crate::{
         rakp::{RAKPMessage1, RAKPMessage2, RAKPMessage3, Rakp},
         request::IpmiRawRequest,
         response::RespPayload,
-        AuthType, CompletionCode, Packet, Payload, PayloadType,
+        CompletionCode, Packet, Payload, PayloadType,
     },
-    NetFn,
+    IpmiCommand, IpmiHeader, IpmiV2Header, NetFn, RmcpHeader,
 };
 
 pub type Result<T> = core::result::Result<T, IPMIClientError>;
@@ -189,7 +189,9 @@ impl IPMIClient<SessionInactived> {
         self.session.password_mac_key = Some(rakp2_mac_key.into());
 
         self.get_channel_auth_cap()?; // Get channel auth capabilites and set cipher
-        self.rmcpplus_session_authenticate() // rmcp open session and authenticate
+        let mut c = self.rmcpplus_session_authenticate()?; // rmcp open session and authenticate
+        c.set_privilege_level()?;
+        Ok(c)
     }
 
     fn handle_completion_code(&mut self, payload: &RespPayload) -> Result<()> {
@@ -221,7 +223,7 @@ impl IPMIClient<SessionInactived> {
     fn get_channel_auth_cap(&mut self) -> Result<()> {
         let get_channel_auth_cap_packet =
             GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator)
-                .create_packet(AuthType::None, 0x0, 0x0, None);
+                .create_packet();
         self.send_unauth_packet(get_channel_auth_cap_packet)?;
 
         // Get the Channel Cipher Suites
@@ -574,7 +576,9 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
 }
 
 impl IPMIClient<SessionActived> {
-    fn send_packet(&mut self, request_packet: Packet) -> Result<Packet> {
+    pub fn send_packet(&mut self, mut request_packet: Packet) -> Result<Packet> {
+        request_packet.set_session_id(self.session.managed_id);
+        request_packet.set_session_seq_num(self.session.seq_number);
         self.client_socket
             .send(
                 &request_packet
@@ -593,33 +597,53 @@ impl IPMIClient<SessionActived> {
         Ok(response_packet)
     }
 
-    pub fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
-        // Set session privilege level to ADMIN
-        if self.privilege != Privilege::Administrator {
-            let set_session_req =
-                IpmiRawRequest::new(NetFn::App, 0x3b, Some(vec![Privilege::Administrator as u8]))
-                    .create_packet(self.session.managed_id, self.session.seq_number);
+    pub fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: CMD) -> Result<CMD::Output> {
+        let payload = ipmi_cmd.payload();
+        let packet = Packet::new(
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
+            payload,
+        );
+        let resp = self.send_packet(packet)?;
+        Ok(<CMD>::parse(resp.payload.data()).unwrap())
+    }
 
-            let set_session_response: Packet = self.send_packet(set_session_req)?;
-            if let Payload::IpmiResp(payload) = set_session_response.payload {
-                if payload.completion_code == CompletionCode::CompletedNormally {
-                    self.privilege = Privilege::Administrator;
-                }
-            }
-        }
+    pub fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
         let send_data = if data.len() > 2 {
-            Some(data[2..].to_vec())
+            data[2..].to_vec()
         } else {
-            None
+            Vec::new()
         };
 
-        let raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data)
-            .create_packet(self.session.managed_id, self.session.seq_number);
+        let raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
 
         let response: Packet = self.send_packet(raw_request)?;
         let Payload::IpmiResp(payload) = response.payload else {
             Err(IPMIClientError::NoResponse)?
         };
         Ok(payload)
+    }
+
+    fn set_privilege_level(&mut self) -> Result<()> {
+        // Set session privilege level to ADMIN
+        let pri = &self.privilege;
+        if !matches!(pri, Privilege::Administrator) {
+            let set_session_req = IpmiRawRequest::new(
+                NetFn::App,
+                Command::SetSessionPrivilegeLevel,
+                vec![Privilege::Administrator as u8],
+            )
+            .create_packet();
+
+            let set_session_response: Packet = self.send_packet(set_session_req)?;
+            if let Payload::IpmiResp(RespPayload {
+                completion_code: CompletionCode::CompletedNormally,
+                ..
+            }) = set_session_response.payload
+            {
+                self.privilege = Privilege::Administrator;
+            }
+        }
+        Ok(())
     }
 }

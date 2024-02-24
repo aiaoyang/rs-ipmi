@@ -5,7 +5,7 @@ use super::{
     timestamp::Timestamp,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 enum SelRecordType {
     System,
     TimestampedOem(u8),
@@ -24,10 +24,10 @@ impl From<u8> for SelRecordType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct RecordId(u16);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Entry {
     System {
         record_id: RecordId,
@@ -54,7 +54,7 @@ pub enum Entry {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum ParseEntryError {
     NotEnoughData,
     UnknownRecordType(u8),

@@ -48,7 +48,7 @@ impl GetChannelCipherSuitesRequest {
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelCipherSuites,
-                Some(data_bytes),
+                data_bytes,
             )),
         )
     }

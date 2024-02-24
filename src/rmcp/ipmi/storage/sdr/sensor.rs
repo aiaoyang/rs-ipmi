@@ -6,7 +6,7 @@ macro_rules ! sensor_type {
             [$oem_reserved_range:pat],
         }
     } => {
-        #[derive(Debug, Clone, Copy, PartialEq)]
+        #[derive(Debug, Clone, Copy)]
         #[repr(u8)]
         pub enum SensorType {
             $($name = $value,)*

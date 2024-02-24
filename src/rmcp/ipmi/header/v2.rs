@@ -120,18 +120,14 @@ impl From<IpmiV2Header> for Vec<u8> {
 }
 
 impl IpmiV2Header {
-    pub fn new_est(
-        rmcp_plus_session_id: u32,
-        session_seq_number: u32,
-        payload_length: u16,
-    ) -> IpmiV2Header {
+    pub fn new_est(payload_length: u16) -> IpmiV2Header {
         Self::new(
             AuthType::RmcpPlus,
             true,
             true,
             PayloadType::Ipmi,
-            rmcp_plus_session_id,
-            session_seq_number,
+            0,
+            0,
             payload_length,
         )
     }

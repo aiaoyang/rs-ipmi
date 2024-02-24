@@ -67,17 +67,6 @@ pub enum Command {
     // FirmwareFirewallConfiguration,
 }
 
-// impl fmt::Display for Code {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Code::Raw(x) => write!(f, "Unknown: 0x{:X}", x),
-//             Code::GetChannelAuthCapabilities => write!(f, "Get Channel Auth Capabilities"),
-//             Code::SetSessionPrivilegeLevel => write!(f, "Set Session Privilege Level"),
-//             Code::GetChannelCipherSuites => write!(f, "Get Channel Cipher Suites"),
-//         }
-//     }
-// }
-
 impl From<u8> for Command {
     fn from(val: u8) -> Self {
         match val {

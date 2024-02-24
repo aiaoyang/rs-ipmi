@@ -2,7 +2,7 @@ use crate::rmcp::Lun;
 
 use super::constant::{SENSOR_GENERIC_EVENT_DESC, SENSOR_SPECIFIC_EVENT_DESC};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum EventType {
     Unspecified(u8),
     Threshold(u8),
@@ -106,7 +106,7 @@ impl EventType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum EventMessageRevision {
     V2_0,
     V1_0,
@@ -123,13 +123,13 @@ impl From<u8> for EventMessageRevision {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum EventDirection {
     Assert,
     Deassert,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum EventGenerator {
     RqSAAndLun {
         i2c_addr: u8,

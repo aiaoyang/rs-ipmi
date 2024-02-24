@@ -36,27 +36,21 @@ impl GetChannelAuthCapabilitiesRequest {
         }
     }
 
-    pub fn create_packet(
-        self,
-        auth_type: AuthType,
-        session_seq_number: u32,
-        session_id: u32,
-        auth_code: Option<u128>,
-    ) -> Packet {
+    pub fn create_packet(self) -> Packet {
         let data_bytes: Vec<u8> = self.into();
         Packet::new(
             RmcpHeader::default(),
             IpmiHeader::V1_5(IpmiV1Header {
-                auth_type,
-                session_seq_number,
-                session_id,
-                auth_code,
+                auth_type: AuthType::None,
+                session_seq_number: 0,
+                session_id: 0,
+                auth_code: None,
                 payload_length: (data_bytes.len() as u8) + 7,
             }),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
                 Command::GetChannelAuthCapabilities,
-                Some(data_bytes),
+                data_bytes,
             )),
         )
     }
@@ -205,7 +199,7 @@ impl From<bool> for AuthVersion {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Privilege {
     Reserved,
     Callback,
