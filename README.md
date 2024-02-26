@@ -1,19 +1,8 @@
 # rust-ipmi
-<!-- ![Crates.io Version](https://img.shields.io/crates/v/rust-ipmi?style=flat) -->
-<a href="https://crates.io/crates/rust-ipmi"><img alt="Crates.io Version" src="https://img.shields.io/crates/v/rust-ipmi"></a>
-<a href="https://docs.rs/rust-ipmi/latest/rust_ipmi/"><img alt="docs.rs" src="https://img.shields.io/docsrs/rust-ipmi"></a>
-
-[Website](https://crates.io/crates/rust-ipmi) | [API Docs](https://docs.rs/rust-ipmi/latest/rust_ipmi/)
-
-rust-ipmi is a native rust client for remotely managing/monitoring systems with hardware support for IPMI. IPMI is a specification which allows software to interact and communicate with systems through the BMC (Baseboard Management Controller). BMC is a hardware component which enables interaction with a computer's chassis, motherboard, and storage through LAN and serial.
-
-
-### Recent Changes
-- v0.1.1 is live on crates.io 🥳. See release notes [here](https://github.com/htemuri/rust-ipmi/releases/tag/v0.1.1)!
-
-###  Preface
-This is a hobby project to learn some rust, and is NOT a library meant for production use. If you would like a stable, well featured IPMI LAN client, look into ipmi-tool - a CLI tool which has been maintained for over a decade.
-
+## this project inspired by
+1. rust-ipmi(main by this)
+2. ipmi-rs
+3. ipmigo
 ### ⚠️ Security WARNING ⚠️
 
 IPMI through LAN has multiple relatively well-documented security vulnerabilities. Here are a few suggestions to harden your security:
@@ -25,18 +14,26 @@ IPMI through LAN has multiple relatively well-documented security vulnerabilitie
 
 Creating an ipmi client, authenticating against the BMC, and running a raw request
 ```rs
-use rust_ipmi::{IPMIClient, NetFn};
+use rust_ipmi::{IPMIClient, NetFn, GetSelInfo, IpmiHeader, IpmiV2Header, RmcpHeader};
 
 fn main() {
     // create the client for the server you want to execute IPMI commands against
-    let client_inactived = IPMIClient::new("192.168.1.100:623").unwrap();
-    let mut client_actived = client_inactived
+    let mut client = IPMIClient::new("192.168.1.100:623")
+        .unwrap()
         .activate("admin", "admin")
         .map_err(|e| println!("{e:?}"))
         .unwrap();
 
-    let resp = client_actived
+    // let packet = Packet::new(
+    //     RmcpHeader::default(),
+    //     IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
+    //     payload,
+    // );
+
+    let resp = client
         // get first sel record raw command
+        // .send_ipmi_cmd(GetSelInfo)
+        // .send_packet(packet)
         .send_raw_request(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
         .unwrap();
 
