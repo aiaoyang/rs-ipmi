@@ -8,6 +8,59 @@ use crate::{
     SelEntry,
 };
 
+pub struct GetSelInfo;
+
+#[allow(unused)]
+pub struct SelInfo {
+    // Response Data
+    pub sel_version: u8,
+    pub entries: u16,
+    pub free_space: u16,
+    pub last_add_time: u32,
+    pub last_del_time: u32,
+    pub support_alloc_info: bool,
+    pub support_reserve: bool,
+    pub support_partial_add: bool,
+    pub support_delete: bool,
+    pub overflow: bool,
+}
+
+impl IpmiCommand for GetSelInfo {
+    type Output = SelInfo;
+
+    type Error = ParseEntryError;
+
+    fn netfn(&self) -> crate::NetFn {
+        crate::NetFn::Storage
+    }
+
+    fn commnad(&self) -> crate::Command {
+        0x40.into()
+    }
+
+    fn payload(self) -> Payload {
+        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.commnad(), Vec::new()))
+    }
+
+    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
+        if data.len() < 14 {
+            Err(ParseEntryError::NotEnoughData)?
+        }
+        Ok(SelInfo {
+            sel_version: data[0],
+            entries: u16::from_le_bytes([data[1], data[2]]),
+            free_space: u16::from_le_bytes([data[3], data[4]]),
+            last_add_time: u32::from_le_bytes([data[5], data[6], data[7], data[8]]),
+            last_del_time: u32::from_le_bytes([data[9], data[10], data[11], data[12]]),
+            support_alloc_info: data[13] & 0x01 != 0,
+            support_reserve: data[13] & 0x02 != 0,
+            support_partial_add: data[13] & 0x04 != 0,
+            support_delete: data[13] & 0x08 != 0,
+            overflow: data[13] & 0x80 != 0,
+        })
+    }
+}
+
 #[allow(unused)]
 #[derive(Debug)]
 pub struct SelRecord {
