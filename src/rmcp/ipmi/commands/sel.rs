@@ -8,6 +8,7 @@ use crate::{
     SelEntry,
 };
 
+#[allow(unused)]
 #[derive(Debug)]
 pub struct SelRecord {
     next_record_id: [u8; 2],
