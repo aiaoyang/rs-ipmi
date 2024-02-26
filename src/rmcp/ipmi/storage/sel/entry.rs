@@ -76,7 +76,7 @@ impl Entry {
                 let event_message_format = EventMessageRevision::from(data[9]);
                 let sensor_type = data[10];
                 let sensor_number = data[11];
-                let event_direction = if ((data[12] & 0x80) >> 7) == 0 {
+                let event_direction = if (data[12] >> 7) == 0 {
                     EventDirection::Assert
                 } else {
                     EventDirection::Deassert
@@ -113,6 +113,12 @@ impl Entry {
             SelRecordType::Unknown(v) => Err(ParseEntryError::UnknownRecordType(v)),
         }
     }
+}
+
+#[test]
+fn t() {
+    let data = (1 & 0b1000_0000) >> 7;
+    println!("{:b}", data);
 }
 
 impl std::fmt::Display for Entry {
