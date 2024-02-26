@@ -22,5 +22,5 @@ fn main() {
         // .send_raw_request(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
         .unwrap();
 
-    println!("entry: {}", resp.entry());
+    println!("entry: {}", resp.entry);
 }

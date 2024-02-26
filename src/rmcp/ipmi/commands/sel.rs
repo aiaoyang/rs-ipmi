@@ -11,14 +11,9 @@ use crate::{
 #[allow(unused)]
 #[derive(Debug)]
 pub struct SelRecord {
-    next_record_id: [u8; 2],
-    entry: SelEntry,
-    raw_data: Rc<[u8]>,
-}
-impl SelRecord {
-    pub fn entry(&self) -> &SelEntry {
-        &self.entry
-    }
+    pub next_record_id: [u8; 2],
+    pub entry: SelEntry,
+    pub raw_data: Rc<[u8]>,
 }
 
 pub struct GetSelEntry {
