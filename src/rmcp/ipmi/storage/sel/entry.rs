@@ -76,7 +76,7 @@ impl Entry {
                 let event_message_format = EventMessageRevision::from(data[9]);
                 let sensor_type = data[10];
                 let sensor_number = data[11];
-                let event_direction = if (data[12] & 0x80) == 0x80 {
+                let event_direction = if data[12] == 0 {
                     EventDirection::Assert
                 } else {
                     EventDirection::Deassert
