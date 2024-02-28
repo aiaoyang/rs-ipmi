@@ -1,10 +1,6 @@
 use std::rc::Rc;
 
-use crate::{
-    err::{IpmiPayloadRequestError, ParseError},
-    rmcp::Payload,
-    Command,
-};
+use crate::{err::IpmiPayloadRequestError, rmcp::Payload, Command};
 
 use super::{Address, CompletionCode, IpmiCommand, NetfnLun};
 
@@ -68,13 +64,5 @@ impl IpmiCommand for IpmiRawCommand {
                 }
             },
         })
-    }
-
-    fn check_cc_success(cc: CompletionCode) -> Result<(), ParseError> {
-        if cc.is_success() {
-            Ok(())
-        } else {
-            Err(ParseError::UnknownCompletionCode)
-        }
     }
 }

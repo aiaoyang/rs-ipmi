@@ -2,7 +2,7 @@ use std::{io, num::TryFromIntError};
 
 use thiserror::Error;
 
-use crate::rmcp::open_session::StatusCode;
+use crate::{rmcp::open_session::StatusCode, CompletionCode};
 
 use super::{CommandError, NetFnError, PacketError};
 
@@ -41,4 +41,7 @@ pub enum IPMIClientError {
     UsernameOver255InLength(#[from] TryFromIntError),
     #[error("Session not established yet")]
     SessionNotEstablishedYet,
+
+    #[error("Parse Response error: {0:?}")]
+    ParseResponse(#[from] CompletionCode),
 }

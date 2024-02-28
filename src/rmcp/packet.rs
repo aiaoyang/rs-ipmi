@@ -1,7 +1,7 @@
 use crate::{
     err::PacketError,
     rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
-    IpmiV2Header,
+    CompletionCode, IpmiV2Header,
 };
 
 use super::{
@@ -170,11 +170,16 @@ pub enum Payload {
 }
 
 impl Payload {
-    pub fn data(&self) -> &[u8] {
-        if let Payload::IpmiResp(RespPayload { data, .. }) = self {
-            data
+    pub fn data_and_completion(&self) -> (&[u8], CompletionCode) {
+        if let Payload::IpmiResp(RespPayload {
+            data,
+            completion_code,
+            ..
+        }) = self
+        {
+            (data, *completion_code)
         } else {
-            &[]
+            (&[], CompletionCode::CompletedNormally)
         }
     }
 }

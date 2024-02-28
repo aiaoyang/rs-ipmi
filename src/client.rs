@@ -473,7 +473,14 @@ impl IPMIClient<SessionActived> {
         let resp: Packet = (self.send_packet(packet).await?.as_slice(), &self.session.k2)
             .try_into()
             .unwrap();
-        Ok(<CMD>::parse(resp.payload.data()).unwrap())
+
+        let (data, code) = resp.payload.data_and_completion();
+
+        if !matches!(code, CompletionCode::CompletedNormally) {
+            Err(IPMIClientError::ParseResponse(code))
+        } else {
+            Ok(<CMD>::parse(data).unwrap())
+        }
     }
 
     pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {

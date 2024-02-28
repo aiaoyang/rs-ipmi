@@ -58,6 +58,14 @@ pub enum ParseEntryError {
 }
 
 impl Entry {
+    pub fn id(&self) -> u16 {
+        if let Entry::System { record_id, .. } = self {
+            record_id.0
+        } else {
+            0
+        }
+    }
+
     pub fn parse(data: &[u8]) -> Result<Self, ParseEntryError> {
         if data.len() < 7 {
             return Err(ParseEntryError::NotEnoughData(7));

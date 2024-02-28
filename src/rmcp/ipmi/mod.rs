@@ -12,9 +12,9 @@ pub use header::v2::*;
 pub use header::*;
 pub use payload::*;
 pub use storage::sel::{event::EventType, Entry as SelEntry};
+use thiserror::Error;
 
 use crate::err::LunError;
-use crate::err::ParseError;
 use crate::Command;
 
 use super::Payload;
@@ -26,17 +26,17 @@ pub trait IpmiCommand {
     fn commnad(&self) -> Command;
     fn payload(self) -> Payload;
 
-    fn check_cc_success(cc: CompletionCode) -> Result<(), ParseError> {
+    fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, CompletionCode> {
         if cc.is_success() {
-            Ok(())
+            Ok(cc)
         } else {
-            Err(crate::err::ParseError::UnknownCompletionCode)
+            Err(cc)
         }
     }
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Error)]
 pub enum CompletionCode {
     CompletedNormally,
     NodeBusy,
@@ -66,6 +66,12 @@ pub enum CompletionCode {
     OEM(u8),
     CommandCode(u8),
     Reserved(u8),
+}
+
+impl std::fmt::Display for CompletionCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
 }
 
 impl From<u8> for CompletionCode {

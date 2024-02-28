@@ -22,26 +22,21 @@ async fn main() -> Result<(), std::io::Error> {
         .map_err(|e| println!("{e:?}"))
         .unwrap();
 
-    // let get_sel_cmd = GetSelEntry::new(0, 0, 0);
-    // let payload = get_sel_cmd.payload();
-    // let packet = Packet::new(
-    //     RmcpHeader::default(),
-    //     IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
-    //     payload,
-    // );
-    let res = c
-        .send_ipmi_cmd(GetSelInfo)
-        .await
-        // .send_packet(packet)
-        // .send_raw_request(&[0x0A, 0x23, 0x00, 0x00, 0xff, 0x0ff, 0x00, 0x0e])
-        // .send_raw_request(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
-        .unwrap();
-    println!("res: {res:?}");
+    let res = c.send_ipmi_cmd(GetSelInfo).await.unwrap();
 
-    let mut next = 0;
+    let counter = 10;
+
+    let first_offset_id = if res.entries > counter {
+        let first_record = c.send_ipmi_cmd(GetSelEntry::new(0, 0, 0)).await.unwrap();
+        let delta = u16::from_le_bytes(first_record.next_record_id) - first_record.entry.id();
+        (res.entries - counter + 1) * delta
+    } else {
+        0
+    };
+
+    let mut next = first_offset_id;
 
     let mut records: Vec<SelEntry> = Vec::new();
-
     while next != u16::from_le_bytes([0xff, 0xff]) {
         let res = c.send_ipmi_cmd(GetSelEntry::new(0, next, 0)).await.unwrap();
         next = u16::from_le_bytes(res.next_record_id);
