@@ -28,7 +28,7 @@ impl TryFrom<&[u8]> for IpmiV2Header {
         let payload_bit_slice = value[1];
         let payload_enc = u8_ms_bit(payload_bit_slice, 0);
         let payload_auth = u8_ms_bit(payload_bit_slice, 1);
-        let payload_type: PayloadType = (payload_bit_slice << 3 >> 3).try_into()?;
+        let payload_type: PayloadType = (payload_bit_slice & 0x3f).try_into()?;
         let oem_iana: Option<u32>;
         let oem_payload_id: Option<u16>;
         let rmcp_plus_session_id: u32;
@@ -39,19 +39,19 @@ impl TryFrom<&[u8]> for IpmiV2Header {
                 if value.len() != 18 {
                     Err(IpmiV2HeaderError::WrongLength)?
                 }
-                oem_iana = Some(u32::from_be_bytes([value[2], value[3], value[4], value[5]]));
-                oem_payload_id = Some(u16::from_be_bytes([value[6], value[7]]));
+                oem_iana = Some(u32::from_le_bytes([value[2], value[3], value[4], value[5]]));
+                oem_payload_id = Some(u16::from_le_bytes([value[6], value[7]]));
                 rmcp_plus_session_id =
-                    u32::from_be_bytes([value[8], value[9], value[10], value[11]]);
+                    u32::from_le_bytes([value[8], value[9], value[10], value[11]]);
                 session_seq_number =
-                    u32::from_be_bytes([value[12], value[13], value[14], value[15]]);
+                    u32::from_le_bytes([value[12], value[13], value[14], value[15]]);
                 payload_length = u16::from_le_bytes([value[16], value[17]]);
             }
             _ => {
                 oem_iana = None;
                 oem_payload_id = None;
-                rmcp_plus_session_id = u32::from_be_bytes([value[2], value[3], value[4], value[5]]);
-                session_seq_number = u32::from_be_bytes([value[6], value[7], value[8], value[9]]);
+                rmcp_plus_session_id = u32::from_le_bytes([value[2], value[3], value[4], value[5]]);
+                session_seq_number = u32::from_le_bytes([value[6], value[7], value[8], value[9]]);
                 payload_length = u16::from_le_bytes([value[10], value[11]]);
             }
         }
@@ -97,23 +97,16 @@ impl From<IpmiV2Header> for Vec<u8> {
                 result
             }
             _ => {
-                let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
-                let ses_seq_le = val.session_seq_number.to_le_bytes();
-                let len_be = val.payload_length.to_le_bytes();
+                let mut ret = [0_u8; 12];
+                ret[0] = val.auth_type.into();
+                ret[1] = (val.payload_enc as u8) << 7
+                    | (val.payload_auth as u8) << 6
+                    | (u8::from(val.payload_type));
+                ret[2..6].copy_from_slice(&val.rmcp_plus_session_id.to_le_bytes());
+                ret[6..10].copy_from_slice(&val.session_seq_number.to_le_bytes());
+                ret[10..].copy_from_slice(&val.payload_length.to_le_bytes());
 
-                let mut result = Vec::new();
-                result.extend([val.auth_type.into(), {
-                    match (val.payload_enc, val.payload_auth) {
-                        (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(val.payload_type)),
-                        (true, false) => (0x1 << 7) | (u8::from(val.payload_type)),
-                        (false, true) => (0x1 << 6) | (u8::from(val.payload_type)),
-                        (false, false) => u8::from(val.payload_type),
-                    }
-                }]);
-                result.extend(rmcp_ses_le);
-                result.extend(ses_seq_le);
-                result.extend(len_be);
-                result
+                ret.into()
             }
         }
     }
@@ -182,7 +175,7 @@ impl TryFrom<u8> for PayloadType {
     type Error = IpmiV2HeaderError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
+        match value & 0b0011_1111 {
             0x00 => Ok(PayloadType::Ipmi),
             0x01 => Ok(PayloadType::Sol),
             0x02 => Ok(PayloadType::Oem),

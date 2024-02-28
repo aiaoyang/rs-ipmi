@@ -50,7 +50,7 @@ impl IpmiHeader {
         match auth_type {
             AuthType::RmcpPlus => {
                 let length = 12;
-                let payload_type: PayloadType = (second_byte << 3 >> 3).try_into()?;
+                let payload_type: PayloadType = second_byte.try_into()?;
                 match payload_type {
                     PayloadType::Oem => Ok(length + 6),
                     _ => Ok(length),
@@ -58,6 +58,12 @@ impl IpmiHeader {
             }
             AuthType::None => Ok(10),
             _ => Ok(26),
+        }
+    }
+    pub fn set_payload_len(&mut self, len: usize) {
+        match self {
+            IpmiHeader::V1_5(h) => h.payload_length = len as u8,
+            IpmiHeader::V2_0(h) => h.payload_length = len as u16,
         }
     }
 

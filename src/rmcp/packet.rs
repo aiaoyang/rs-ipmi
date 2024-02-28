@@ -1,9 +1,6 @@
 use crate::{
     err::PacketError,
-    rmcp::{
-        plus::crypto::{aes_128_cbc_decrypt, aes_128_cbc_encrypt, generate_iv, hash_hmac_sha_256},
-        IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader,
-    },
+    rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
     IpmiV2Header,
 };
 
@@ -56,10 +53,10 @@ impl TryFrom<&[u8]> for Packet {
 }
 
 // k2 req
-impl TryFrom<(&[u8], &[u8; 32])> for Packet {
+impl TryFrom<(&[u8], &[u8; 20])> for Packet {
     type Error = PacketError;
 
-    fn try_from(value: (&[u8], &[u8; 32])) -> Result<Self, PacketError> {
+    fn try_from(value: (&[u8], &[u8; 20])) -> Result<Self, PacketError> {
         let nbytes: usize = value.0.len();
         if nbytes < 20 {
             Err(PacketError::WrongLength)?
@@ -71,13 +68,11 @@ impl TryFrom<(&[u8], &[u8; 32])> for Packet {
         if let IpmiHeader::V2_0(header) = ipmi_header {
             if header.payload_enc {
                 // decrypt slice
-                let iv = &value.0[16..32];
                 let binding = aes_128_cbc_decrypt(
+                    &mut value.0[16..16 + payload_length].to_vec(),
                     value.1[..16].try_into().unwrap(),
-                    iv.try_into().unwrap(),
-                    value.0[32..(32 + payload_length - 16)].to_vec(),
                 );
-                binding.iter().for_each(|byte| payload_vec.push(*byte))
+                payload_vec.extend(binding);
             } else {
                 payload_vec.extend_from_slice(&value.0[(nbytes - payload_length)..nbytes])
             }
@@ -118,7 +113,7 @@ impl From<Packet> for Vec<u8> {
         result.extend(&<Vec<u8>>::from(val.ipmi_header));
         match val.payload {
             Payload::None => {}
-            a => result.append(&mut a.into()),
+            payload => result.extend(&<Vec<u8>>::from(payload)),
         }
         result
     }
@@ -152,40 +147,6 @@ impl Packet {
         }) = &mut self.ipmi_header
         {
             *session_seq_number = seq_num;
-        }
-    }
-    pub fn to_encrypted_bytes(&self, k1: &[u8; 32], k2: &[u8; 32]) -> Option<Vec<u8>> {
-        if let IpmiHeader::V2_0(header) = self.ipmi_header {
-            let mut encrypted_packet: Vec<u8> = Vec::new();
-            let mut auth_code_input: Vec<u8> = header.into();
-            let iv = generate_iv();
-            auth_code_input.extend(&iv);
-            let mut encrypted_payload = aes_128_cbc_encrypt(
-                (*k2)[..16].try_into().unwrap(), // aes 128 cbc wants the first 128 bits of k2 as the key
-                iv,
-                self.payload.clone().into(),
-            );
-            auth_code_input.append(&mut encrypted_payload);
-
-            // integrity padding
-            let padding_needed = 4 - ((auth_code_input.len() + 2) % 4);
-            auth_code_input.extend(vec![0xff; padding_needed]);
-            auth_code_input.push(padding_needed.try_into().unwrap());
-            /*
-            **Next Header**. Reserved in IPMI v2.0. Set
-            to 07h for RMCP+ packets
-            defined in this specification.
-            */
-            auth_code_input.push(0x7);
-            // hmac sha256-128 using k1 as key and auth_code input as input buffer
-            let auth_code = &hash_hmac_sha_256(k1.into(), auth_code_input.clone()); // choose first 128 bits for sha256_128
-
-            encrypted_packet.extend(&<[u8; 4]>::from(&self.rmcp_header));
-            encrypted_packet.extend(&auth_code_input);
-            encrypted_packet.extend(&auth_code[..16]);
-            Some(encrypted_packet)
-        } else {
-            None
         }
     }
 }

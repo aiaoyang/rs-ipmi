@@ -17,7 +17,7 @@ pub struct GetChannelAuthCapabilitiesRequest {
 impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
     fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
         vec![
-            ((val.channel_version as u8) << 7 | val.channel_number << 4 >> 4),
+            ((val.channel_version as u8) << 7 | val.channel_number & 0x0f),
             val.max_privilege as u8,
         ]
     }
@@ -199,7 +199,7 @@ impl From<bool> for AuthVersion {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum Privilege {
     Reserved,
     Callback,

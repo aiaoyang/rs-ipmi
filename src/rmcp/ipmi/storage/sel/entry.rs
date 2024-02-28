@@ -1,9 +1,6 @@
 use crate::rmcp::storage::sdr::sensor::SensorType;
 
-use super::{
-    event::{EventDirection, EventGenerator, EventMessageRevision, EventType},
-    timestamp::Timestamp,
-};
+use super::event::{EventDirection, EventGenerator, EventMessageRevision, EventType};
 
 #[derive(Debug, Clone, Copy)]
 enum SelRecordType {
@@ -31,7 +28,7 @@ pub struct RecordId(u16);
 pub enum Entry {
     System {
         record_id: RecordId,
-        timestamp: Timestamp,
+        timestamp: u32,
         generator_id: EventGenerator,
         event_message_format: EventMessageRevision,
         sensor_type: SensorType,
@@ -43,7 +40,7 @@ pub enum Entry {
     OemTimestamped {
         record_id: RecordId,
         ty: u8,
-        timestamp: Timestamp,
+        timestamp: u32,
         manufacturer_id: u32,
         data: [u8; 6],
     },
@@ -56,14 +53,14 @@ pub enum Entry {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ParseEntryError {
-    NotEnoughData,
+    NotEnoughData(u8),
     UnknownRecordType(u8),
 }
 
 impl Entry {
     pub fn parse(data: &[u8]) -> Result<Self, ParseEntryError> {
-        if data.len() < 15 {
-            return Err(ParseEntryError::NotEnoughData);
+        if data.len() < 7 {
+            return Err(ParseEntryError::NotEnoughData(7));
         }
 
         let record_id = RecordId(u16::from_le_bytes([data[0], data[1]]));
@@ -85,7 +82,7 @@ impl Entry {
                 let event_data = [data[13], data[14], data[15]];
                 Ok(Self::System {
                     record_id,
-                    timestamp: Timestamp::from(timestamp),
+                    timestamp,
                     generator_id,
                     event_message_format,
                     sensor_type: sensor_type.into(),
@@ -98,7 +95,7 @@ impl Entry {
             SelRecordType::TimestampedOem(v) => Ok(Self::OemTimestamped {
                 record_id,
                 ty: v,
-                timestamp: Timestamp::from(timestamp),
+                timestamp,
                 manufacturer_id: u32::from_le_bytes([data[7], data[8], data[9], 0]),
                 data: [data[10], data[11], data[12], data[13], data[14], data[15]],
             }),
@@ -113,12 +110,6 @@ impl Entry {
             SelRecordType::Unknown(v) => Err(ParseEntryError::UnknownRecordType(v)),
         }
     }
-}
-
-#[test]
-fn t() {
-    let data = (1 & 0b1000_0000) >> 7;
-    println!("{:b}", data);
 }
 
 impl std::fmt::Display for Entry {

@@ -25,7 +25,7 @@ impl TryFrom<&[u8]> for RespPayload {
         }
         let netfn_rqlun = NetfnLun::from(value[1]);
         let rqseq_rslun = NetfnLun::from(value[4]);
-        Ok(RespPayload {
+        let ret = RespPayload {
             rq_addr: value[0].into(),
             netfn_rqlun,
             rs_addr: value[3].into(),
@@ -40,7 +40,9 @@ impl TryFrom<&[u8]> for RespPayload {
                     value[7..len].into()
                 }
             },
-        })
+        };
+        log::debug!("resp: {:?}", ret);
+        Ok(ret)
     }
 }
 

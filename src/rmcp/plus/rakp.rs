@@ -28,27 +28,51 @@ impl From<Rakp> for Vec<u8> {
 #[derive(Clone, Debug)]
 pub struct RAKPMessage1 {
     pub message_tag: u8,
-    pub managed_system_session_id: u32,
-    pub remote_console_random_number: u128,
-    pub inherit_role: bool,
-    pub requested_max_privilege: Privilege,
+    pub managed_id: u32,
+    pub console_rnd_number: u128,
+    pub privilege_level: Privilege,
+    pub nameonly_lookup: bool,
     pub username_length: u8,
     pub username: String,
 }
 
+impl std::fmt::Display for RAKPMessage1 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "msg_tag: {}, mgr_id: {}, console_rnd_num: {}, privilege: {:?}",
+            self.message_tag, self.managed_id, self.console_rnd_number, self.privilege_level
+        ))
+    }
+}
+
+fn privilege(nameonly_lookup: bool, privilege: Privilege) -> u8 {
+    if !nameonly_lookup {
+        privilege as u8 | 0x10
+    } else {
+        privilege as u8
+    }
+}
+
 impl From<RAKPMessage1> for Vec<u8> {
     fn from(val: RAKPMessage1) -> Self {
-        let mut result = Vec::new();
-        result.push(val.message_tag);
-        result.extend([0x0, 0x0, 0x0]);
-        result.extend(u32::to_le_bytes(val.managed_system_session_id));
-        result.extend(u128::to_le_bytes(val.remote_console_random_number));
-        result.push(
-            ((val.inherit_role as u8) << 4) | ((val.requested_max_privilege as u8) << 4 >> 4),
-        );
-        result.extend([0x0, 0x0]);
-        result.push(val.username_length);
-        result.extend(val.username.into_bytes());
+        let username = if val.username_length > 16 {
+            &val.username.as_bytes()[..=16]
+        } else {
+            val.username.as_bytes()
+        };
+        let mut result = vec![0; 28 + username.len()];
+        result[0] = val.message_tag;
+        // result[1..4] // reserved 0
+        result[4..8].copy_from_slice(&u32::to_le_bytes(val.managed_id));
+        result[8..24].copy_from_slice(&u128::to_le_bytes(val.console_rnd_number));
+
+        result[24] = privilege(val.nameonly_lookup, val.privilege_level);
+        // result[25] reserved 0
+        // result[26] reserved 0
+
+        result[27] = val.username_length;
+
+        result[28..(28 + username.len())].copy_from_slice(username);
         result
     }
 }
@@ -71,18 +95,26 @@ impl RAKPMessage1 {
         message_tag: u8,
         managed_system_session_id: u32,
         remote_console_random_number: u128,
-        inherit_role: bool,
+        nameonly_lookup: bool,
         requested_max_privilege: Privilege,
         username: String,
     ) -> RAKPMessage1 {
         RAKPMessage1 {
             message_tag,
-            managed_system_session_id,
-            remote_console_random_number,
-            inherit_role,
-            requested_max_privilege,
+            managed_id: managed_system_session_id,
+            console_rnd_number: remote_console_random_number,
+            nameonly_lookup,
+            privilege_level: requested_max_privilege,
             username_length: { username.len().try_into().unwrap() },
             username,
+        }
+    }
+    pub fn request_role(&self) -> u8 {
+        let b = self.privilege_level as u8;
+        if !self.nameonly_lookup {
+            b | 0x10
+        } else {
+            b
         }
     }
 }
@@ -90,11 +122,11 @@ impl RAKPMessage1 {
 #[derive(Clone, Debug)]
 pub struct RAKPMessage2 {
     pub message_tag: u8,
-    pub rmcp_plus_status_code: StatusCode,
-    pub remote_console_session_id: u32,
-    pub managed_system_random_number: u128,
-    pub managed_system_guid: u128,
-    pub key_exchange_auth_code: Option<Vec<u8>>,
+    pub status_code: StatusCode,
+    pub console_id: u32,
+    pub managed_rnd_number: u128,
+    pub managed_guid: u128,
+    pub key_exchange_auth_code: Option<[u8; 20]>,
 }
 
 impl TryFrom<&[u8]> for RAKPMessage2 {
@@ -104,28 +136,20 @@ impl TryFrom<&[u8]> for RAKPMessage2 {
         if value.len() < 8 {
             Err(IpmiPayloadError::WrongLength)?
         }
-        let message_tag = value[0];
-        let rmcp_plus_status_code: StatusCode = value[1].into();
-        let remote_console_session_id = u32::from_le_bytes(value[4..8].try_into().unwrap());
-        let mut managed_system_random_number = 0;
-        let mut managed_system_guid = 0;
-        let mut key_exchange_auth_code = None;
-
-        if value.len() >= 40 {
-            managed_system_random_number = u128::from_le_bytes(value[8..24].try_into().unwrap());
-            managed_system_guid = u128::from_le_bytes(value[24..40].try_into().unwrap());
-            if value.len() > 40 {
-                key_exchange_auth_code = Some(value[40..].to_vec())
-            }
-        };
 
         Ok(RAKPMessage2 {
-            message_tag,
-            rmcp_plus_status_code,
-            remote_console_session_id,
-            managed_system_random_number,
-            managed_system_guid,
-            key_exchange_auth_code,
+            message_tag: value[0],
+            status_code: value[1].into(),
+            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
+            managed_rnd_number: u128::from_le_bytes(value[8..24].try_into().unwrap()),
+            managed_guid: u128::from_le_bytes(value[24..40].try_into().unwrap()),
+            key_exchange_auth_code: if value.len() >= 40 {
+                let mut arr = [0; 20];
+                arr.copy_from_slice(&value[40..]);
+                Some(arr)
+            } else {
+                None
+            },
         })
     }
 }
@@ -133,22 +157,27 @@ impl TryFrom<&[u8]> for RAKPMessage2 {
 #[derive(Clone, Debug)]
 pub struct RAKPMessage3 {
     pub message_tag: u8,
-    pub rmcp_plus_status_code: StatusCode,
-    pub managed_system_session_id: u32,
+    pub status_code: StatusCode,
+    pub managed_id: u32,
     pub key_exchange_auth_code: Option<Vec<u8>>,
 }
 
 impl From<RAKPMessage3> for Vec<u8> {
     fn from(val: RAKPMessage3) -> Self {
-        let mut result = Vec::new();
-        result.push(val.message_tag);
-        result.push(val.rmcp_plus_status_code.into());
-        result.extend([0x0, 0x0]);
-        result.extend(u32::to_le_bytes(val.managed_system_session_id));
-        if let Some(auth_code) = &val.key_exchange_auth_code {
-            result.append(&mut auth_code.clone());
-        }
-        result
+        let mut ret = if let Some(auth_code) = val.key_exchange_auth_code {
+            let mut vec = vec![0; 8 + auth_code.len()];
+            vec[8..].copy_from_slice(&auth_code);
+            vec
+        } else {
+            vec![0; 8]
+        };
+        ret[0] = val.message_tag;
+        ret[1] = val.status_code.into();
+        // re[2] reserved
+        // re[3] reserved
+        ret[4..8].copy_from_slice(&val.managed_id.to_le_bytes());
+
+        ret
     }
 }
 
@@ -177,8 +206,8 @@ impl RAKPMessage3 {
     ) -> RAKPMessage3 {
         RAKPMessage3 {
             message_tag,
-            rmcp_plus_status_code,
-            managed_system_session_id,
+            status_code: rmcp_plus_status_code,
+            managed_id: managed_system_session_id,
             key_exchange_auth_code,
         }
     }
@@ -187,9 +216,9 @@ impl RAKPMessage3 {
 #[derive(Clone, Debug)]
 pub struct RAKPMessage4 {
     pub message_tag: u8,
-    pub rmcp_plus_status_code: StatusCode,
-    pub management_console_session_id: u32,
-    pub integrity_check_value: Option<Vec<u8>>,
+    pub status_code: StatusCode,
+    pub console_id: u32,
+    pub integrity_auth_code: Option<[u8; 12]>,
 }
 
 impl TryFrom<&[u8]> for RAKPMessage4 {
@@ -201,11 +230,11 @@ impl TryFrom<&[u8]> for RAKPMessage4 {
         }
         Ok(RAKPMessage4 {
             message_tag: value[0],
-            rmcp_plus_status_code: value[1].into(),
-            management_console_session_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
-            integrity_check_value: {
+            status_code: value[1].into(),
+            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
+            integrity_auth_code: {
                 if value.len() > 8 {
-                    Some(value[8..].to_vec())
+                    Some(value[8..].try_into().unwrap())
                 } else {
                     None
                 }

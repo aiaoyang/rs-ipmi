@@ -35,6 +35,15 @@ impl From<&RmcpHeader> for [u8; 4] {
     }
 }
 
+impl From<&RmcpHeader> for Vec<u8> {
+    fn from(val: &RmcpHeader) -> Self {
+        [val.version, val.reserved, val.sequence_number, {
+            ((val.rmcp_ack as u8) << 6) | (u8::from(&val.message_class))
+        }]
+        .to_vec()
+    }
+}
+
 impl Default for RmcpHeader {
     fn default() -> RmcpHeader {
         RmcpHeader {

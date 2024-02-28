@@ -1,18 +1,7 @@
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, BlockSizeUser, KeyIvInit};
 
-pub fn hash_hmac_sha_256(key: Vec<u8>, data: Vec<u8>) -> [u8; 32] {
-    type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        HmacSha256::new_from_slice(key.as_slice()).expect("HMAC can take key of any size");
-    mac.update(data.as_slice());
-    let result = mac.finalize();
-    let mut vec_bytes = [0; 32];
-    for (index, i) in result.into_bytes().into_iter().enumerate() {
-        vec_bytes[index] = i;
-    }
-    vec_bytes
+pub fn hash_hmac_sha1(key: &[u8], data: &[u8]) -> [u8; 20] {
+    hmac_sha1::hmac_sha1(key, data)
 }
 
 pub fn generate_iv() -> [u8; 16] {
@@ -23,42 +12,84 @@ pub fn generate_iv() -> [u8; 16] {
     iv
 }
 
-pub fn aes_128_cbc_encrypt(key: [u8; 16], iv: [u8; 16], mut payload_bytes: Vec<u8>) -> Vec<u8> {
+pub fn aes_128_cbc_encrypt(mut payload_bytes: Vec<u8>, key: [u8; 16]) -> Vec<u8> {
+    let iv = generate_iv();
     type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
-    let binding = pad_payload_bytes(&mut payload_bytes);
-    let plaintext = binding.as_slice();
-    let mut buf = [0u8; 48];
-    let pt_len = plaintext.len();
-    buf[..pt_len].copy_from_slice(plaintext);
-    let mut binding = buf;
+    padding_data(&mut payload_bytes, Aes128CbcEnc::block_size());
+    let data_len = payload_bytes.len();
     let ct = Aes128CbcEnc::new(&key.into(), &iv.into())
-        .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut binding, pt_len)
+        .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut payload_bytes, data_len)
         .unwrap();
-    ct.to_vec()
+    let mut ret = iv.to_vec();
+    ret.extend(ct);
+    ret
 }
 
-pub fn aes_128_cbc_decrypt(key: [u8; 16], iv: [u8; 16], encrypted_bytes: Vec<u8>) -> Vec<u8> {
-    let mut old_encrypted = encrypted_bytes.clone();
+pub fn aes_128_cbc_decrypt(encrypted_bytes: &mut [u8], key: [u8; 16]) -> Vec<u8> {
+    let iv: [u8; 16] = encrypted_bytes[..16].try_into().unwrap();
+    let old_encrypted = &mut encrypted_bytes[16..];
     type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
     let ct = Aes128CbcDec::new(&key.into(), &iv.into())
-        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut old_encrypted)
-        .unwrap()
-        .to_vec();
+        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(old_encrypted)
+        .unwrap();
     // structure of these packets is [[payload x bytes],[padding (1, 2, 3, 4, ...)], padding_length]
     let number_of_padded_bytes: usize = ct[ct.len() - 1].into();
     ct[..(ct.len() - (number_of_padded_bytes + 1))].to_vec()
 }
 
-fn pad_payload_bytes(data: &mut Vec<u8>) -> Vec<u8> {
-    let length = &data.len();
-    if length % 16 == 0 {
-        data.to_vec()
+fn padding_data(data: &mut Vec<u8>, block_size: usize) {
+    let origin_length = data.len();
+    let m = (origin_length + 1) % block_size;
+    let pad_len = if m != 0 {
+        block_size - (m)
     } else {
-        let padding_needed = 16 - (length % 16);
-        for i in 1..padding_needed {
-            data.push(i.try_into().unwrap());
-        }
-        data.push((padding_needed - 1).try_into().unwrap());
-        data.to_vec()
+        return;
+    };
+
+    for i in 0..pad_len {
+        data.push(i as u8 + 1);
     }
+    data.push(pad_len as u8);
+}
+
+// Trailer's source is the session header and payload
+pub fn add_tailer(data: &mut Vec<u8>, k1: [u8; 20]) {
+    // Session Trailer (Table 13-8)
+    // +---------------+
+    // | Integrity PAD |  n bytes
+    // | Pad Length    |  1 byte
+    // | Next Header   |  1 byte  (0x07)
+    // | AuthCode      | 12 bytes
+    // +---------------+
+    let origin_len = data.len();
+    let m = (origin_len + 2 + 12) % 4;
+    let pad_len = if m != 0 { 4 - m } else { 0 };
+
+    for _ in 0..pad_len {
+        data.push(0xff);
+    }
+    data.push(pad_len as u8);
+
+    // Next Header, Reserved in IPMI v2.0. Set to 07h for RMCP+ packets defined in this specification.
+    data.push(0x07);
+
+    let auth_code = hmac_sha1::hmac_sha1(&k1, &data[..origin_len + pad_len + 2]);
+    data.extend(&auth_code[..12]);
+}
+
+#[test]
+fn test_add_tailer() {
+    let mut data = vec![0; 32];
+    let k1 = [1_u8; 20];
+    add_tailer(&mut data, k1);
+    println!("{:?}", &data[(data.len() - 1 - 2 - 12)..]);
+}
+
+#[test]
+fn encrypt_decrypt() {
+    let key = [0; 16];
+    let data = vec![1; 32];
+    let mut ret = aes_128_cbc_encrypt(data.clone(), key);
+    let decrypted_data = aes_128_cbc_decrypt(&mut ret[..], key);
+    assert_eq!(data, decrypted_data);
 }

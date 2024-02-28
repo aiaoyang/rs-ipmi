@@ -16,7 +16,7 @@ impl From<GetChannelCipherSuitesRequest> for Vec<u8> {
         vec![
             (val.channel_number << 4 >> 4),
             (std::convert::Into::<u8>::into(val.payload_type) << 3 >> 3),
-            (((val.list_algo_cipher_suite as u8) << 7) | (val.list_index << 2 >> 2)),
+            (((val.list_algo_cipher_suite as u8) << 7) | (val.list_index & 0x3f)),
         ]
     }
 }

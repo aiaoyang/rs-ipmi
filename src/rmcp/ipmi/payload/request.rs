@@ -13,7 +13,7 @@ pub struct IpmiRawRequest {
 }
 
 impl IpmiRawRequest {
-    const PAYLOAD_LENGTH: u16 = 32;
+    // const PAYLOAD_LENGTH: u16 = 32;
     pub fn new(
         netfn: impl Into<NetFn>,
         command: impl Into<Command>,
@@ -32,7 +32,7 @@ impl IpmiRawRequest {
         let data = self.data;
         Packet::new(
             RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_est(Self::PAYLOAD_LENGTH)),
+            IpmiHeader::V2_0(IpmiV2Header::new_est(7 + data.len() as u16)),
             Payload::IpmiReq(ReqPayload::new(netfn, cmd, data)),
         )
     }
@@ -56,19 +56,14 @@ const REMOTE_SOFTWARE_ID: u8 = 0x81;
 impl From<ReqPayload> for Vec<u8> {
     fn from(val: ReqPayload) -> Self {
         let mut result: Vec<u8> = vec![];
-        let rs_addr = BMC_SLAVE_ADDRESS;
-
-        let checksum1 = checksum(&[rs_addr, val.netfn_rslun.0]);
-        let rq_addr = REMOTE_SOFTWARE_ID;
-        let command_code: u8 = (val.command).into();
 
         result.extend(&[
-            rs_addr,
+            BMC_SLAVE_ADDRESS,
             val.netfn_rslun.0,
-            checksum1,
-            rq_addr,
+            checksum(&[BMC_SLAVE_ADDRESS, val.netfn_rslun.0]),
+            REMOTE_SOFTWARE_ID,
             val.rqseq_rqlun.0,
-            command_code,
+            (val.command).into(),
         ]);
 
         result.extend(&val.data);

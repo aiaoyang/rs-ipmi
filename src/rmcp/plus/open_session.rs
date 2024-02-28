@@ -105,7 +105,7 @@ pub struct RMCPPlusOpenSessionRequest {
     */
     pub message_tag: u8,
     pub max_privilege: Privilege,
-    pub remote_console_session_id: u32,
+    pub console_id: u32,
     pub authentication_algorithm: AuthAlgorithm,
     pub integrity_algorithm: IntegrityAlgorithm,
     pub confidentiality_algorithm: ConfidentialityAlgorithm,
@@ -113,27 +113,21 @@ pub struct RMCPPlusOpenSessionRequest {
 
 impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
-        let mut result = Vec::new();
-        result.push(val.message_tag);
-        result.push(val.max_privilege as u8);
-        result.extend([0x0, 0x0]); // reserved bytes
-        result.extend(u32::to_le_bytes(val.remote_console_session_id)); // remote console session id
-        result.push(0x0); // auth payload type
-        result.extend([0x0, 0x0]); // reserved bytes
-        result.push(0x08); // auth payload len
-        result.push(val.authentication_algorithm.into()); // Authentication Algorithm
-        result.extend([0x0, 0x0, 0x0]); // reserved bytes
-        result.push(0x01); // integrity payload type
-        result.extend([0x0, 0x0]); // reserved bytes
-        result.push(0x08); // integrity payload len
-        result.push(val.integrity_algorithm.into()); // integrity Algorithm
-        result.extend([0x0, 0x0, 0x0]); // reserved bytes
-        result.push(0x02); // confidentiality payload type
-        result.extend([0x0, 0x0]); // reserved bytes
-        result.push(0x08); // confidentiality payload len
-        result.push(val.confidentiality_algorithm.into()); // confidentiality Algorithm
-        result.extend([0x0, 0x0, 0x0]); // reserved bytes
-        result
+        let mut ret = [0_u8; 32];
+        ret[0] = val.message_tag;
+        ret[1] = val.max_privilege as u8;
+        ret[4..8].copy_from_slice(&u32::to_le_bytes(val.console_id)); // remote console session id
+        ret[8] = 0; // authentication payload type(0)
+        ret[11] = 8; // payload length
+        ret[12] = val.authentication_algorithm.into();
+        ret[16] = 1; // integrity payload type(1)
+        ret[19] = 8; // payload length
+        ret[20] = val.integrity_algorithm.into();
+        ret[24] = 2; // confidentiality payload type(2)
+        ret[27] = 8; // payload length
+        ret[28] = val.confidentiality_algorithm.into();
+
+        ret.into()
     }
 }
 
@@ -162,7 +156,7 @@ impl RMCPPlusOpenSessionRequest {
         RMCPPlusOpenSessionRequest {
             message_tag,
             max_privilege,
-            remote_console_session_id,
+            console_id: remote_console_session_id,
             authentication_algorithm,
             integrity_algorithm,
             confidentiality_algorithm,

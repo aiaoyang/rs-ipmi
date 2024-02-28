@@ -11,6 +11,7 @@ use crate::{
 pub struct GetSelInfo;
 
 #[allow(unused)]
+#[derive(Debug)]
 pub struct SelInfo {
     // Response Data
     pub sel_version: u8,
@@ -44,7 +45,8 @@ impl IpmiCommand for GetSelInfo {
 
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 14 {
-            Err(ParseEntryError::NotEnoughData)?
+            println!("data: {:?}", data);
+            Err(ParseEntryError::NotEnoughData(14))?
         }
         Ok(SelInfo {
             sel_version: data[0],
@@ -109,7 +111,8 @@ impl IpmiCommand for GetSelEntry {
 
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 2 {
-            Err(ParseEntryError::NotEnoughData)?
+            println!("data: {:?}", data);
+            Err(ParseEntryError::NotEnoughData(2))?
         }
         Ok(SelRecord {
             next_record_id: [data[0], data[1]],
