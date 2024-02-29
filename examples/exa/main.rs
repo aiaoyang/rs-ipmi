@@ -1,5 +1,3 @@
-// use std::io::Read;
-
 use std::env;
 
 use rust_ipmi::{GetSelEntry, GetSelInfo, IPMIClient, SelEntry};

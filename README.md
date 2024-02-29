@@ -14,31 +14,53 @@ IPMI through LAN has multiple relatively well-documented security vulnerabilitie
 
 Creating an ipmi client, authenticating against the BMC, and running a raw request
 ```rs
-use rust_ipmi::{IPMIClient, NetFn, GetSelInfo, IpmiHeader, IpmiV2Header, RmcpHeader};
+use std::env;
 
-fn main() {
-    // create the client for the server you want to execute IPMI commands against
-    let mut client = IPMIClient::new("192.168.1.100:623")
-        .unwrap()
-        .activate("admin", "admin")
+use rust_ipmi::{GetSelEntry, GetSelInfo, IPMIClient, SelEntry};
+
+#[tokio::main]
+async fn main() -> Result<(), std::io::Error> {
+    let mut ev = env::args().collect::<Vec<String>>();
+    if ev.len() < 2 {
+        ev = vec![
+            "".into(),
+            "192.168.1.100".into(),
+            "admin".into(),
+            "admin".into(),
+        ];
+    }
+    let client_inactived = IPMIClient::new(format!("{}:623", ev[1])).await.unwrap();
+    let mut c = client_inactived
+        .activate(&ev[2], &ev[3])
+        .await
         .map_err(|e| println!("{e:?}"))
         .unwrap();
 
-    // let packet = Packet::new(
-    //     RmcpHeader::default(),
-    //     IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
-    //     payload,
-    // );
+    let res = c.send_ipmi_cmd(GetSelInfo).await.unwrap();
 
-    let resp = client
-        // get first sel record raw command
-        // .send_ipmi_cmd(GetSelInfo)
-        // .send_packet(packet)
-        .send_raw_request(&[0x0A, 0x43, 0, 0, 0, 0, 0, 0xff])
-        .unwrap();
+    let counter = 10;
 
-    println!("resp: {:?}", resp);
+    let first_offset_id = if res.entries > counter {
+        let first_record = c.send_ipmi_cmd(GetSelEntry::new(0, 0, 0)).await.unwrap();
+        let delta = u16::from_le_bytes(first_record.next_record_id) - first_record.entry.id();
+        (res.entries - counter + 1) * delta
+    } else {
+        0
+    };
+
+    let mut next = first_offset_id;
+
+    let mut records: Vec<SelEntry> = Vec::new();
+    while next != u16::from_le_bytes([0xff, 0xff]) {
+        let res = c.send_ipmi_cmd(GetSelEntry::new(0, next, 0)).await.unwrap();
+        next = u16::from_le_bytes(res.next_record_id);
+        records.push(res.entry);
+    }
+
+    println!("entry: {:#?}", records);
+    Ok(())
 }
+
 ```
 
 <!-- ## Design documentation for rust-ipmi -->
