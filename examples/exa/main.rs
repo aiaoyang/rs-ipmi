@@ -8,9 +8,9 @@ async fn main() -> Result<(), std::io::Error> {
     if ev.len() < 2 {
         ev = vec![
             "".into(),
-            "172.18.10.25".into(),
+            "192.168.1.100".into(),
             "admin".into(),
-            "W129404@106-2U".into(),
+            "admin".into(),
         ];
     }
     let client_inactived = IPMIClient::new(format!("{}:623", ev[1])).await.unwrap();
