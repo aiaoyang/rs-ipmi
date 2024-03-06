@@ -28,14 +28,14 @@ impl EventType {
     pub fn description(
         &self,
         sensor_type: impl Into<u8> + std::marker::Copy,
-        data: [u8; 3],
-    ) -> &'static str {
+        data: &[u8; 3],
+    ) -> &(&'static str, EventDirection) {
         match self {
             EventType::Threshold(event_type) | EventType::Generic(event_type) => {
                 let offset = data[0] & 0x0f;
                 SENSOR_GENERIC_EVENT_DESC
                     .get(&((*event_type as u32) << 8 | offset as u32))
-                    .unwrap_or(&"generic unknown")
+                    .unwrap_or(&("generic unknown", EventDirection::Assert))
             }
             EventType::SensorSpecific(_) => {
                 let d1: u8 = data[0];
@@ -56,10 +56,12 @@ impl EventType {
                         (d2, d3) = (0xff, 0xff);
                     }
                 }
-                "specific not found"
+                &("specific not found", EventDirection::Assert)
             }
-            EventType::Oem(_) => "oem",
-            EventType::Unknown(_) | EventType::Unspecified(_) => "other unknown",
+            EventType::Oem(_) => &("oem", EventDirection::Assert),
+            EventType::Unknown(_) | EventType::Unspecified(_) => {
+                &("other unknown", EventDirection::Assert)
+            }
         }
     }
 
@@ -123,7 +125,7 @@ impl From<u8> for EventMessageRevision {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventDirection {
     Assert,
     Deassert,

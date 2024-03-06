@@ -1,6 +1,6 @@
 use std::env;
 
-use rust_ipmi::{GetSelEntry, GetSelInfo, IPMIClient, SelEntry};
+use rust_ipmi::{GetSelEntry, GetSelInfo, IPMIClient};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -34,13 +34,11 @@ async fn main() -> Result<(), std::io::Error> {
 
     let mut next = first_offset_id;
 
-    let mut records: Vec<SelEntry> = Vec::new();
     while next != u16::from_le_bytes([0xff, 0xff]) {
         let res = c.send_ipmi_cmd(GetSelEntry::new(0, next, 0)).await.unwrap();
         next = u16::from_le_bytes(res.next_record_id);
-        records.push(res.entry);
+        println!("{:?}", res.entry.description_with_assetion(),);
     }
 
-    println!("entry: {:#?}", records);
     Ok(())
 }

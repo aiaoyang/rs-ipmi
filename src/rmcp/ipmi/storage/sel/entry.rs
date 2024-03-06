@@ -58,6 +58,26 @@ pub enum ParseEntryError {
 }
 
 impl Entry {
+    pub fn description_with_assetion(&self) -> (&str, bool, String) {
+        match &self {
+            Entry::System {
+                sensor_type,
+                event_type,
+                event_data,
+                event_direction,
+                ..
+            } => {
+                let (s, d) = event_type.description(sensor_type, event_data);
+                let reason = if d == event_direction {
+                    "".into()
+                } else {
+                    format!("expect: {:?}, get: {:?}", d, event_direction)
+                };
+                (s, d == event_direction, reason)
+            }
+            _ => ("unreacheable", false, "".into()),
+        }
+    }
     pub fn id(&self) -> u16 {
         if let Entry::System { record_id, .. } = self {
             record_id.0
@@ -65,7 +85,6 @@ impl Entry {
             0
         }
     }
-
     pub fn parse(data: &[u8]) -> Result<Self, ParseEntryError> {
         if data.len() < 7 {
             return Err(ParseEntryError::NotEnoughData(7));
@@ -134,7 +153,7 @@ impl std::fmt::Display for Entry {
                 event_type,
                 event_data,
             } => {
-                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type:?}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data: 0b{:b}",event_type.description(sensor_type, *event_data),event_type.data_to_u32(sensor_type, *event_data)))
+                f.write_fmt(format_args!("record_id: {record_id:?}, timestamp: {timestamp}, generator_id: {generator_id:?}, event_message_format: {event_message_format:?}, sensor_type: {sensor_type:?}, sensor_number: {sensor_number}, event_direction: {event_direction:?}, event_type: {:?}, event_data: 0b{:b}",event_type.description(sensor_type, event_data),event_type.data_to_u32(sensor_type, *event_data)))
             }
             _ => f.write_fmt(format_args!("{self:?}"))
         }
