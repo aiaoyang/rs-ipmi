@@ -1,11 +1,7 @@
 use crate::{
-    err::{
-        AuthAlgorithmError, ConfidentialityAlgorithmError, IntegrityAlgorithmError,
-        IpmiPayloadError,
-    },
-    rmcp::{
-        commands::Privilege, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
-    },
+    commands::{CommandCode, Privilege},
+    err::{ECommand, Error},
+    rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader},
 };
 
 #[derive(Clone, Debug)]
@@ -219,11 +215,16 @@ pub struct RMCPPlusOpenSessionResponse {
 }
 
 impl TryFrom<&[u8]> for RMCPPlusOpenSessionResponse {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 33 {
-            Err(IpmiPayloadError::WrongLength)?
+            Err(Self::Error::from(ECommand::NotEnoughData {
+                command: CommandCode::Raw(0),
+                expected_len: 33,
+                get_len: value.len(),
+                data: value.into(),
+            }))?
         }
         Ok(RMCPPlusOpenSessionResponse {
             message_tag: value[0],
@@ -331,7 +332,7 @@ pub enum AuthAlgorithm {
 }
 
 impl TryFrom<u8> for AuthAlgorithm {
-    type Error = IpmiPayloadError;
+    type Error = ECommand;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -340,7 +341,7 @@ impl TryFrom<u8> for AuthAlgorithm {
             0x2 => Ok(AuthAlgorithm::RakpHmacMd5),
             0x3 => Ok(AuthAlgorithm::RakpHmacSha256),
             0xC0..=0xFF => Ok(AuthAlgorithm::Oem(value)),
-            _ => Err(AuthAlgorithmError::UnknownAuthAlgorithm(value))?,
+            _ => Err(ECommand::UnknownAuthAlgorithm(value))?,
         }
     }
 }
@@ -368,7 +369,7 @@ pub enum IntegrityAlgorithm {
 }
 
 impl TryFrom<u8> for IntegrityAlgorithm {
-    type Error = IpmiPayloadError;
+    type Error = ECommand;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -378,7 +379,7 @@ impl TryFrom<u8> for IntegrityAlgorithm {
             0x3 => Ok(IntegrityAlgorithm::Md5128),
             0x4 => Ok(IntegrityAlgorithm::HmacSha256128),
             0xC0..=0xFF => Ok(IntegrityAlgorithm::Oem(value)),
-            _ => Err(IntegrityAlgorithmError::UnknownIntegrityAlgorithm(value))?,
+            _ => Err(ECommand::UnknownIntegrityAlgorithm(value))?,
         }
     }
 }
@@ -405,7 +406,7 @@ pub enum ConfidentialityAlgorithm {
     Oem(u8),
 }
 impl TryFrom<u8> for ConfidentialityAlgorithm {
-    type Error = IpmiPayloadError;
+    type Error = ECommand;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -414,7 +415,7 @@ impl TryFrom<u8> for ConfidentialityAlgorithm {
             0x2 => Ok(ConfidentialityAlgorithm::XRc4128),
             0x3 => Ok(ConfidentialityAlgorithm::XRc440),
             0x30..=0xFF => Ok(ConfidentialityAlgorithm::Oem(value)),
-            _ => Err(ConfidentialityAlgorithmError::UnknownConfidentialityAlgorithm(value))?,
+            _ => Err(ECommand::UnknownConfidentialityAlgorithm(value))?,
         }
     }
 }

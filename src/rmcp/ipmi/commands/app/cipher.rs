@@ -1,7 +1,11 @@
-use crate::err::IpmiPayloadError;
-use crate::rmcp::request::ReqPayload;
-use crate::rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader};
-use crate::{Command, NetFn};
+use crate::{
+    commands::CommandCode,
+    err::EIpmiPayload,
+    rmcp::{
+        request::ReqPayload, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
+    },
+    NetFn,
+};
 
 #[derive(Clone)]
 pub struct GetChannelCipherSuitesRequest {
@@ -47,7 +51,7 @@ impl GetChannelCipherSuitesRequest {
             )),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
-                Command::GetChannelCipherSuites,
+                CommandCode::GetChannelCipherSuites,
                 data_bytes,
             )),
         )
@@ -85,11 +89,11 @@ pub struct GetChannelCipherSuitesResponse {
 }
 
 impl TryFrom<&[u8]> for GetChannelCipherSuitesResponse {
-    type Error = IpmiPayloadError;
+    type Error = EIpmiPayload;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 2 {
-            Err(IpmiPayloadError::WrongLength)?
+            Err(EIpmiPayload::WrongLength)?
         }
         Ok(GetChannelCipherSuitesResponse {
             channel_number: value[0],
@@ -99,7 +103,7 @@ impl TryFrom<&[u8]> for GetChannelCipherSuitesResponse {
 }
 
 impl TryFrom<Vec<u8>> for GetChannelCipherSuitesResponse {
-    type Error = IpmiPayloadError;
+    type Error = EIpmiPayload;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         value.as_slice().try_into()

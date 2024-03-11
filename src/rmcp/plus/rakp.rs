@@ -1,8 +1,7 @@
 use crate::{
-    err::IpmiPayloadError,
-    rmcp::{
-        commands::Privilege, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
-    },
+    commands::{CommandCode, Privilege},
+    err::{ECommand, Error},
+    rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader},
 };
 
 use super::open_session::StatusCode;
@@ -130,19 +129,24 @@ pub struct RAKPMessage2 {
 }
 
 impl TryFrom<&[u8]> for RAKPMessage2 {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
-            Err(IpmiPayloadError::WrongLength)?
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(1),
+                expected_len: 8,
+                get_len: value.len(),
+                data: value.into(),
+            })?
         }
 
         Ok(RAKPMessage2 {
             message_tag: value[0],
             status_code: value[1].into(),
-            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
-            managed_rnd_number: u128::from_le_bytes(value[8..24].try_into().unwrap()),
-            managed_guid: u128::from_le_bytes(value[24..40].try_into().unwrap()),
+            console_id: u32::from_le_bytes(value[4..8].try_into()?),
+            managed_rnd_number: u128::from_le_bytes(value[8..24].try_into()?),
+            managed_guid: u128::from_le_bytes(value[24..40].try_into()?),
             key_exchange_auth_code: if value.len() >= 40 {
                 let mut arr = [0; 20];
                 arr.copy_from_slice(&value[40..]);
@@ -222,19 +226,24 @@ pub struct RAKPMessage4 {
 }
 
 impl TryFrom<&[u8]> for RAKPMessage4 {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
-            Err(IpmiPayloadError::WrongLength)?
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(3),
+                expected_len: 8,
+                get_len: value.len(),
+                data: value.into(),
+            })?
         }
         Ok(RAKPMessage4 {
             message_tag: value[0],
             status_code: value[1].into(),
-            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
+            console_id: u32::from_le_bytes(value[4..8].try_into()?),
             integrity_auth_code: {
                 if value.len() > 8 {
-                    Some(value[8..].try_into().unwrap())
+                    Some(value[8..].try_into()?)
                 } else {
                     None
                 }

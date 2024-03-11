@@ -1,11 +1,13 @@
+use std::time::Duration;
+
 use log::info;
 use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
-    err::IPMIClientError,
+    commands::{CloseSessionCMD, CommandCode, GetChannelAuthCapabilitiesRequest, Privilege},
+    err::{EClient, Error},
     rmcp::{
         crypto::{add_tailer, aes_128_cbc_encrypt, hash_hmac_sha1},
-        ipmi::commands::Privilege,
         open_session::{
             AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm, RMCPPlusOpenSession,
             RMCPPlusOpenSessionRequest, StatusCode,
@@ -15,11 +17,10 @@ use crate::{
         response::RespPayload,
         CompletionCode, Packet, Payload,
     },
-    Command, GetChannelAuthCapabilitiesRequest, IpmiCommand, IpmiHeader, IpmiV2Header, NetFn,
-    RmcpHeader,
+    IpmiCommand, IpmiHeader, IpmiV2Header, NetFn, RmcpHeader,
 };
 
-pub type Result<T> = core::result::Result<T, IPMIClientError>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 pub enum State {
     Discovery,
@@ -109,11 +110,11 @@ impl IPMIClient<SessionInactived> {
     ) -> Result<IPMIClient<SessionInactived>> {
         let client_socket = UdpSocket::bind("0.0.0.0:0")
             .await
-            .map_err(IPMIClientError::FailedBind)?;
+            .map_err(EClient::FailedBind)?;
         client_socket
             .connect(ipmi_server_addr)
             .await
-            .map_err(IPMIClientError::ConnectToIPMIServer)?;
+            .map_err(EClient::ConnectToIPMIServer)?;
         Ok(IPMIClient {
             client_socket,
             session: SessionInactived::default(),
@@ -177,31 +178,12 @@ impl IPMIClient<SessionInactived> {
                                                    // c.set_privilege_level()?;
     }
 
-    // fn handle_completion_code(&mut self, payload: &RespPayload) -> Result<()> {
-    //     if !payload.completion_code.is_success() {
-    //         return Ok(());
-    //     }
-    //     match payload.command {
-    //         Command::GetChannelAuthCapabilities => {
-    //             let response: GetChannelAuthCapabilitiesResponse =
-    //                 GetChannelAuthCapabilitiesResponse::try_from(payload.data.as_slice())
-    //                     .map_err(PacketError::IPMIPayload)?;
-    //             // Currently don't support IPMI v1.5
-    //             if let AuthVersion::IpmiV1_5 = response.auth_version {
-    //                 return Err(IPMIClientError::UnsupportedVersion);
-    //             }
-    //             self.session.channel_auth_capabilities = Some(response);
-    //         }
-    //         _ => return Ok(()),
-    //     }
-    //     Ok(())
-    // }
-
     async fn get_channel_auth_cap(&mut self) -> Result<()> {
         let get_channel_auth_cap_packet =
             GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator)
                 .create_packet();
-        self.send_unauth_packet(get_channel_auth_cap_packet).await?;
+        self.send_unauth_packet_retry(get_channel_auth_cap_packet, 3)
+            .await?;
 
         Ok(())
     }
@@ -269,16 +251,14 @@ impl IPMIClient<SessionInactived> {
         )
         .into();
         let osr = self
-            .send_unauth_packet(rmcp_plus_open_session_packet)
+            .send_unauth_packet_retry(rmcp_plus_open_session_packet, 3)
             .await?;
         let Payload::Rmcp(RMCPPlusOpenSession::Response(msg)) = osr.payload else {
-            Err(IPMIClientError::MisformedResponse)?
+            Err(EClient::MisformedResponse)?
         };
 
         let StatusCode::NoErrors = &msg.rmcp_plus_status_code else {
-            Err(IPMIClientError::FailedToOpenSession(
-                msg.rmcp_plus_status_code,
-            ))?
+            Err(EClient::FailedToOpenSession(msg.rmcp_plus_status_code))?
         };
         self.session.managed_id = Some(msg.managed_system_session_id);
 
@@ -294,13 +274,13 @@ impl IPMIClient<SessionInactived> {
         let rakp1_packet: Packet = rk1.into();
 
         // RAKP Message 2
-        let r2_pkt = self.send_unauth_packet(rakp1_packet).await?;
+        let r2_pkt = self.send_unauth_packet_retry(rakp1_packet, 3).await?;
         let Payload::Rakp(Rakp::Message2(msg2)) = &r2_pkt.payload else {
-            Err(IPMIClientError::MisformedResponse)?
+            Err(EClient::MisformedResponse)?
         };
 
         let StatusCode::NoErrors = &msg2.status_code else {
-            Err(IPMIClientError::FailedToOpenSession(msg2.status_code))?
+            Err(EClient::FailedToOpenSession(msg2.status_code))?
         };
 
         self.session.managed_system_guid = Some(msg2.managed_guid);
@@ -315,7 +295,7 @@ impl IPMIClient<SessionInactived> {
                     self.gen_rk2_auth_code(),
                     msg2.key_exchange_auth_code.unwrap()
                 );
-                Err(IPMIClientError::FailedToValidateRAKP2)?
+                Err(EClient::FailedToValidateRAKP2)?
             }
         }
 
@@ -331,18 +311,18 @@ impl IPMIClient<SessionInactived> {
         .into();
 
         // RAKP Message 4
-        let r4_pkt = self.send_unauth_packet(rakp3_packet).await?;
+        let r4_pkt = self.send_unauth_packet_retry(rakp3_packet, 3).await?;
 
         let Payload::Rakp(Rakp::Message4(msg4)) = r4_pkt.payload else {
-            Err(IPMIClientError::MisformedResponse)?
+            Err(EClient::MisformedResponse)?
         };
 
         let StatusCode::NoErrors = msg4.status_code else {
-            Err(IPMIClientError::FailedToOpenSession(msg4.status_code))?
+            Err(EClient::FailedToOpenSession(msg4.status_code))?
         };
         if let Some(auth_code) = msg4.integrity_auth_code {
             if auth_code != self.gen_rk4_auth_code() {
-                Err(IPMIClientError::MismatchedKeyExchangeAuthCode)?
+                Err(EClient::MismatchedKeyExchangeAuthCode)?
             }
             self.session.state = State::Established;
         }
@@ -355,17 +335,34 @@ impl IPMIClient<SessionInactived> {
         self.client_socket
             .send(&x)
             .await
-            .map_err(IPMIClientError::FailedSend)?;
+            .map_err(EClient::FailedSend)?;
         let mut buf = [0_u8; 1024];
         let Ok((n_bytes, _)) = self.client_socket.recv_from(&mut buf).await else {
             info!("send_unauth_packet");
-            Err(IPMIClientError::NoResponse)?
+            Err(EClient::NoResponse)?
         };
 
         match self.session.k2 {
             Some(k2) => Ok(Packet::try_from((&buf[..n_bytes], &k2))?),
             None => Ok(Packet::try_from(&buf[..n_bytes])?),
         }
+    }
+    async fn send_unauth_packet_retry(
+        &mut self,
+        request_packet: Packet,
+        retry_n: u8,
+    ) -> Result<Packet> {
+        for i in 0..retry_n {
+            let res = self.send_unauth_packet(request_packet.clone()).await;
+            if res.is_ok() {
+                return res;
+            }
+            if i == retry_n - 1 {
+                return res;
+            }
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+        Err(EClient::NoResponse)?
     }
 
     fn privilege(nameonly_lookup: bool, privilege: Privilege) -> u8 {
@@ -388,7 +385,7 @@ impl IPMIClient<SessionInactived> {
             self.username
                 .len()
                 .try_into()
-                .map_err(IPMIClientError::UsernameOver255InLength)?,
+                .map_err(EClient::UsernameOver255InLength)?,
         );
         self.username
             .as_bytes()
@@ -428,6 +425,10 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
 }
 
 impl IPMIClient<SessionActived> {
+    pub async fn deactivated(&mut self) -> Result<()> {
+        let cmd = CloseSessionCMD::new(self.session.managed_id);
+        self.send_ipmi_cmd(cmd).await
+    }
     pub async fn send_packet(&mut self, mut request_packet: Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
@@ -447,7 +448,7 @@ impl IPMIClient<SessionActived> {
         self.client_socket
             .send(&packet_vec)
             .await
-            .map_err(IPMIClientError::FailedSend)?;
+            .map_err(EClient::FailedSend)?;
         self.session.seq_number += 1;
 
         let mut buf = [0; 1024];
@@ -456,7 +457,7 @@ impl IPMIClient<SessionActived> {
             Ok((nbytes, _)) => nbytes,
             Err(e) => {
                 info!("send packet: {}", e);
-                Err(IPMIClientError::NoResponse)?
+                Err(EClient::NoResponse)?
             }
         };
 
@@ -470,17 +471,42 @@ impl IPMIClient<SessionActived> {
             IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
             payload,
         );
-        let resp: Packet = (self.send_packet(packet).await?.as_slice(), &self.session.k2)
+        let resp: Packet = (
+            self.send_packet_retry(packet, 3).await?.as_slice(),
+            &self.session.k2,
+        )
             .try_into()
             .unwrap();
 
         let (data, code) = resp.payload.data_and_completion();
 
         if !matches!(code, CompletionCode::CompletedNormally) {
-            Err(IPMIClientError::ParseResponse(code))
+            Err(EClient::ParseResponse(code))?
         } else {
-            Ok(<CMD>::parse(data).unwrap())
+            match <CMD>::parse(data) {
+                Ok(v) => Ok(v),
+                Err(e) => Err(e.into()),
+            }
         }
+    }
+
+    pub async fn send_packet_retry(
+        &mut self,
+        request_packet: Packet,
+        retry_n: u8,
+    ) -> Result<Vec<u8>> {
+        // let mut res: Result<CMD::Output>;
+        for i in 0..retry_n {
+            let res = self.send_packet(request_packet.clone()).await;
+            if res.is_ok() {
+                return res;
+            }
+            if i == retry_n - 1 {
+                return res;
+            }
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+        Err(EClient::NoResponse)?
     }
 
     pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
@@ -491,11 +517,11 @@ impl IPMIClient<SessionActived> {
         };
 
         let raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
-        let response = self.send_packet(raw_request).await?;
+        let response = self.send_packet_retry(raw_request, 3).await?;
         let packet: Packet = (response.as_slice(), &self.session.k2).try_into().unwrap();
         let Payload::IpmiResp(payload) = packet.payload else {
             info!("send raw request");
-            Err(IPMIClientError::NoResponse)?
+            Err(EClient::NoResponse)?
         };
         Ok(payload)
     }
@@ -507,7 +533,7 @@ impl IPMIClient<SessionActived> {
         if !matches!(pri, Privilege::Administrator) {
             let set_session_req = IpmiRawRequest::new(
                 NetFn::App,
-                Command::SetSessionPrivilegeLevel,
+                CommandCode::SetSessionPrivilegeLevel,
                 vec![Privilege::Administrator as u8],
             )
             .create_packet();

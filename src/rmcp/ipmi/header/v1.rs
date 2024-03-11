@@ -1,6 +1,7 @@
-use crate::err::{IpmiHeaderError, IpmiV1HeaderError};
-
-use super::AuthType;
+use crate::{
+    err::{EIpmiHeader, EV1Header},
+    rmcp::AuthType,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct IpmiV1Header {
@@ -12,11 +13,11 @@ pub struct IpmiV1Header {
 }
 
 impl TryFrom<&[u8]> for IpmiV1Header {
-    type Error = IpmiHeaderError;
+    type Error = EIpmiHeader;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if (value.len() != 10) && (value.len() != 26) {
-            Err(IpmiV1HeaderError::WrongLength)?
+            Err(EV1Header::WrongLength)?
         }
         let auth_type: AuthType = value[0].try_into()?;
         let auth_code: Option<u128>;
@@ -31,7 +32,7 @@ impl TryFrom<&[u8]> for IpmiV1Header {
                 auth_code = Some(u128::from_be_bytes(
                     value[9..25]
                         .try_into()
-                        .map_err(|_| IpmiV1HeaderError::WrongLength)?,
+                        .map_err(|_| EV1Header::WrongLength)?,
                 ));
                 payload_length = value[25];
             }

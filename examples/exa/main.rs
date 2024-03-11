@@ -1,6 +1,9 @@
 use std::env;
 
-use rust_ipmi::{GetSelEntry, GetSelInfo, IPMIClient};
+use rust_ipmi::{
+    commands::{GetSelEntry, GetSelInfo},
+    IPMIClient,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -8,7 +11,7 @@ async fn main() -> Result<(), std::io::Error> {
     if ev.len() < 2 {
         ev = vec![
             "".into(),
-            "192.168.1.100".into(),
+            "172.18.10.25".into(),
             "admin".into(),
             "admin".into(),
         ];

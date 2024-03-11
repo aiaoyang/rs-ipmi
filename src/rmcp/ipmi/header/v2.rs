@@ -1,5 +1,7 @@
-use crate::err::{IpmiHeaderError, IpmiV2HeaderError};
-use crate::u8_ms_bit;
+use crate::{
+    err::{EIpmiHeader, EV2Header},
+    u8_ms_bit,
+};
 
 use super::AuthType;
 
@@ -17,11 +19,11 @@ pub struct IpmiV2Header {
 }
 
 impl TryFrom<&[u8]> for IpmiV2Header {
-    type Error = IpmiHeaderError;
+    type Error = EIpmiHeader;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if (value.len() != 12) && (value.len() != 18) {
-            Err(IpmiV2HeaderError::WrongLength)?
+            Err(EV2Header::WrongLength)?
         }
 
         let auth_type: AuthType = value[0].try_into()?;
@@ -37,7 +39,7 @@ impl TryFrom<&[u8]> for IpmiV2Header {
         match payload_type {
             PayloadType::Oem => {
                 if value.len() != 18 {
-                    Err(IpmiV2HeaderError::WrongLength)?
+                    Err(EV2Header::WrongLength)?
                 }
                 oem_iana = Some(u32::from_le_bytes([value[2], value[3], value[4], value[5]]));
                 oem_payload_id = Some(u16::from_le_bytes([value[6], value[7]]));
@@ -172,7 +174,7 @@ pub enum PayloadType {
 }
 
 impl TryFrom<u8> for PayloadType {
-    type Error = IpmiV2HeaderError;
+    type Error = EV2Header;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value & 0b0011_1111 {
@@ -185,7 +187,7 @@ impl TryFrom<u8> for PayloadType {
             0x13 => Ok(PayloadType::RAKP2),
             0x14 => Ok(PayloadType::RAKP3),
             0x15 => Ok(PayloadType::RAKP4),
-            _ => Err(IpmiV2HeaderError::UnsupportedPayloadType(value)),
+            _ => Err(EV2Header::UnsupportedPayloadType(value)),
         }
     }
 }

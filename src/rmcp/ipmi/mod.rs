@@ -1,36 +1,39 @@
-mod header;
-mod payload;
+pub use header::v1::*;
+pub use header::v2::*;
+pub use header::*;
+pub use payload::*;
+pub use storage::sel::*;
 
 pub mod commands;
 pub mod raw;
 pub mod storage;
 
+mod header;
+mod payload;
+
 use std::fmt;
 
-pub use header::v1::*;
-pub use header::v2::*;
-pub use header::*;
-pub use payload::*;
-pub use storage::sel::{event::EventType, Entry as SelEntry};
 use thiserror::Error;
 
-use crate::err::LunError;
-use crate::Command;
+use crate::{
+    commands::CommandCode,
+    err::{ECommand, EIpmiPayload, Error},
+};
 
 use super::Payload;
 
 pub trait IpmiCommand {
     type Output;
-    type Error: fmt::Debug;
+    type Error: Into<Error>;
     fn netfn(&self) -> NetFn;
-    fn commnad(&self) -> Command;
+    fn commnad(&self) -> CommandCode;
     fn payload(self) -> Payload;
 
-    fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, CompletionCode> {
+    fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, Error> {
         if cc.is_success() {
             Ok(cc)
         } else {
-            Err(cc)
+            Err(EIpmiPayload::CompletionCode(cc))?
         }
     }
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error>;
@@ -172,7 +175,7 @@ impl NetfnLun {
     pub fn netfn(&self) -> NetFn {
         (self.0 >> 2).into()
     }
-    pub fn lun(&self) -> Result<Lun, LunError> {
+    pub fn lun(&self) -> Result<Lun, ECommand> {
         Lun::new(self.0 & Self::IPMB_LUN_MASK)
     }
 }
@@ -230,13 +233,13 @@ pub enum Lun {
 }
 
 impl Lun {
-    pub fn new(value: u8) -> Result<Self, LunError> {
+    pub fn new(value: u8) -> Result<Self, ECommand> {
         match value {
             0b00 => Ok(Lun::Bmc),
             0b01 => Ok(Lun::Oem1),
             0b10 => Ok(Lun::Sms),
             0b11 => Ok(Lun::Oem2),
-            _ => Err(LunError::UnknownLun(value)),
+            _ => Err(ECommand::UnknownLun(value)),
         }
     }
 }

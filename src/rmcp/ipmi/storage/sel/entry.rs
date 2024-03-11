@@ -1,4 +1,8 @@
-use crate::rmcp::storage::sdr::sensor::SensorType;
+use crate::{
+    commands::CommandCode,
+    err::{ECommand, Error},
+    rmcp::storage::sdr::sensor::SensorType,
+};
 
 use super::event::{EventDirection, EventGenerator, EventMessageRevision, EventType};
 
@@ -51,12 +55,6 @@ pub enum Entry {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ParseEntryError {
-    NotEnoughData(u8),
-    UnknownRecordType(u8),
-}
-
 impl Entry {
     pub fn description_with_assetion(&self) -> (&str, bool, String) {
         match &self {
@@ -85,9 +83,14 @@ impl Entry {
             0
         }
     }
-    pub fn parse(data: &[u8]) -> Result<Self, ParseEntryError> {
+    pub fn parse(data: &[u8]) -> Result<Self, Error> {
         if data.len() < 7 {
-            return Err(ParseEntryError::NotEnoughData(7));
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(0x43),
+                expected_len: 7,
+                get_len: data.len(),
+                data: data.into(),
+            })?;
         }
 
         let record_id = RecordId(u16::from_le_bytes([data[0], data[1]]));
@@ -134,7 +137,7 @@ impl Entry {
                     data[11], data[12], data[13], data[14], data[15],
                 ],
             }),
-            SelRecordType::Unknown(v) => Err(ParseEntryError::UnknownRecordType(v)),
+            SelRecordType::Unknown(v) => Err(ECommand::UnknownRecordType(v))?,
         }
     }
 }

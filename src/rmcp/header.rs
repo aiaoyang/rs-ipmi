@@ -1,4 +1,4 @@
-use crate::err::RMCPHeaderError;
+use crate::err::{ERMCPHeader, Error};
 
 #[derive(Clone, Debug)]
 pub struct RmcpHeader {
@@ -10,11 +10,11 @@ pub struct RmcpHeader {
 }
 
 impl TryFrom<&[u8]> for RmcpHeader {
-    type Error = RMCPHeaderError;
+    type Error = Error;
 
-    fn try_from(value: &[u8]) -> Result<Self, RMCPHeaderError> {
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 4 {
-            Err(RMCPHeaderError::WrongLength)?
+            Err(ERMCPHeader::WrongLength)?
         }
 
         Ok(RmcpHeader {
@@ -64,14 +64,14 @@ pub enum MessageClass {
 }
 
 impl TryFrom<u8> for MessageClass {
-    type Error = RMCPHeaderError;
+    type Error = ERMCPHeader;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x6 => Ok(MessageClass::Asf),
             0x7 => Ok(MessageClass::Ipmi),
             0x8 => Ok(MessageClass::Oem),
-            _ => Err(RMCPHeaderError::UnsupportedMessageClass(value)),
+            _ => Err(ERMCPHeader::UnsupportedMessageClass(value)),
         }
     }
 }

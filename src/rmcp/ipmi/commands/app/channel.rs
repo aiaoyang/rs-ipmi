@@ -2,9 +2,10 @@
 use std::fmt::Debug;
 
 use crate::{
-    err::{IpmiPayloadError, ParseError, PrivilegeError},
+    commands::CommandCode,
+    err::{ECommand, EIpmiPayload, EPacket},
     rmcp::{request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload, RmcpHeader},
-    u8_ms_bit, Command, NetFn,
+    u8_ms_bit, NetFn,
 };
 
 #[derive(Clone)]
@@ -49,7 +50,7 @@ impl GetChannelAuthCapabilitiesRequest {
             }),
             Payload::IpmiReq(ReqPayload::new(
                 NetFn::App,
-                Command::GetChannelAuthCapabilities,
+                CommandCode::GetChannelAuthCapabilities,
                 data_bytes,
             )),
         )
@@ -71,14 +72,17 @@ pub struct GetChannelAuthCapabilitiesResponse {
 }
 
 impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            Err(IpmiPayloadError::WrongLength)?
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::GetChannelAuthCapabilities,
+                expected_len: 8,
+                get_len: value.len(),
+                data: value.into(),
+            })?
         }
-        // let auth_bv = BitSlice::<u8, Msb0>::from_element(&value[1]);
-        // let auth2_bv = BitSlice::<u8, Msb0>::from_element(&value[2]);
         Ok(GetChannelAuthCapabilitiesResponse {
             channel_number: value[0],
             auth_version: u8_ms_bit(value[1], 0).into(),
@@ -102,7 +106,6 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
                 }
                 result
             },
-            // kg_status: auth2_bv[2].into(),
             kg_status: u8_ms_bit(value[2], 2).into(),
             per_message_auth: u8_ms_bit(value[2], 3),
             user_level_auth: !u8_ms_bit(value[2], 4),
@@ -111,7 +114,6 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
                 u8_ms_bit(value[2], 6).into(),
                 u8_ms_bit(value[2], 7).into(),
             ),
-            // channel_extended_cap: BitSlice::<u8, Msb0>::from_element(&value[3])[6].into(),
             channel_extended_cap: u8_ms_bit(value[3], 6).into(),
             oem_id: u32::from_le_bytes([0, value[4], value[5], value[6]]),
             oem_aux_data: value[7],
@@ -209,9 +211,9 @@ pub enum Privilege {
     Oem,
     // Unknown(u8),
 }
-
+use crate::err::Error;
 impl TryFrom<u8> for Privilege {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -221,9 +223,9 @@ impl TryFrom<u8> for Privilege {
             0x03 => Ok(Privilege::Operator),
             0x04 => Ok(Privilege::Administrator),
             0x05 => Ok(Privilege::Oem),
-            _ => Err(ParseError::Privilege(PrivilegeError::UnknownPrivilege(
-                value,
-            )))?,
+            v => Err(Error::Packet(EPacket::IpmiPayload(EIpmiPayload::Command(
+                ECommand::UnknownPrivilege(v),
+            ))))?,
         }
     }
 }

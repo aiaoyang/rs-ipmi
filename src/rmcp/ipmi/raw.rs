@@ -1,6 +1,10 @@
 use std::rc::Rc;
 
-use crate::{err::IpmiPayloadRequestError, rmcp::Payload, Command};
+use crate::{
+    commands::CommandCode,
+    err::{EIpmiPayload, EPacket},
+    rmcp::Payload,
+};
 
 use super::{Address, CompletionCode, IpmiCommand, NetfnLun};
 
@@ -10,7 +14,7 @@ pub struct IpmiRawCommand {
     // checksum 1
     pub rq_addr: Address,
     pub rqseq_rqlun: NetfnLun,
-    pub command: Command,
+    pub command: CommandCode,
     pub data: Option<Vec<u8>>,
     // checksum 2
 }
@@ -21,20 +25,21 @@ pub struct IpmiRawResponse {
     // checksum 1
     pub rs_addr: Address,
     pub rqseq_rslun: NetfnLun,
-    pub command: Command,
+    pub command: CommandCode,
     pub completion_code: CompletionCode,
     pub data: Rc<[u8]>,
 }
+use crate::err::Error;
 
 impl IpmiCommand for IpmiRawCommand {
     type Output = IpmiRawResponse;
-    type Error = IpmiPayloadRequestError;
+    type Error = Error;
 
     fn netfn(&self) -> crate::NetFn {
         todo!()
     }
 
-    fn commnad(&self) -> Command {
+    fn commnad(&self) -> CommandCode {
         todo!()
     }
 
@@ -42,9 +47,11 @@ impl IpmiCommand for IpmiRawCommand {
         todo!()
     }
 
-    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
-        if data.len() < 8 {
-            Err(IpmiPayloadRequestError::WrongLength)?
+    fn parse(data: &[u8]) -> Result<Self::Output, Error> {
+        if data.len() < 7 {
+            Err(Error::Packet(EPacket::IpmiPayload(
+                EIpmiPayload::WrongLength,
+            )))?
         }
         let netfn_rqlun = NetfnLun::from(data[1]);
         let rqseq_rslun = NetfnLun::from(data[4]);

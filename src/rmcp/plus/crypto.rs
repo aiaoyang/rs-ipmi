@@ -1,5 +1,7 @@
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, BlockSizeUser, KeyIvInit};
 
+use crate::err::Error;
+
 pub fn hash_hmac_sha1(key: &[u8], data: &[u8]) -> [u8; 20] {
     hmac_sha1::hmac_sha1(key, data)
 }
@@ -25,16 +27,15 @@ pub fn aes_128_cbc_encrypt(mut payload_bytes: Vec<u8>, key: [u8; 16]) -> Vec<u8>
     ret
 }
 
-pub fn aes_128_cbc_decrypt(encrypted_bytes: &mut [u8], key: [u8; 16]) -> Vec<u8> {
-    let iv: [u8; 16] = encrypted_bytes[..16].try_into().unwrap();
+pub fn aes_128_cbc_decrypt(encrypted_bytes: &mut [u8], key: [u8; 16]) -> Result<Vec<u8>, Error> {
+    let iv: [u8; 16] = encrypted_bytes[..16].try_into()?;
     let old_encrypted = &mut encrypted_bytes[16..];
     type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
     let ct = Aes128CbcDec::new(&key.into(), &iv.into())
-        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(old_encrypted)
-        .unwrap();
+        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(old_encrypted)?;
     // structure of these packets is [[payload x bytes],[padding (1, 2, 3, 4, ...)], padding_length]
     let number_of_padded_bytes: usize = ct[ct.len() - 1].into();
-    ct[..(ct.len() - (number_of_padded_bytes + 1))].to_vec()
+    Ok(ct[..(ct.len() - (number_of_padded_bytes + 1))].to_vec())
 }
 
 fn padding_data(data: &mut Vec<u8>, block_size: usize) {
@@ -91,5 +92,5 @@ fn encrypt_decrypt() {
     let data = vec![1; 32];
     let mut ret = aes_128_cbc_encrypt(data.clone(), key);
     let decrypted_data = aes_128_cbc_decrypt(&mut ret[..], key);
-    assert_eq!(data, decrypted_data);
+    assert_eq!(data, decrypted_data.unwrap());
 }

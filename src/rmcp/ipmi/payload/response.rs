@@ -1,6 +1,6 @@
 use crate::{
-    err::{IpmiPayloadError, IpmiPayloadRequestError},
-    rmcp::{commands::Command, Address, CompletionCode, NetfnLun},
+    err::{EIpmiPayload, Error},
+    rmcp::{commands::CommandCode, Address, CompletionCode, NetfnLun},
 };
 
 #[derive(Clone, Debug)]
@@ -10,18 +10,18 @@ pub struct RespPayload {
     // checksum 1
     pub rs_addr: Address,
     pub rqseq_rslun: NetfnLun,
-    pub command: Command,
+    pub command: CommandCode,
     pub completion_code: CompletionCode,
     pub data: Vec<u8>,
     // checksum 2
 }
 
 impl TryFrom<&[u8]> for RespPayload {
-    type Error = IpmiPayloadError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
-            Err(IpmiPayloadRequestError::WrongLength)?
+            Err(EIpmiPayload::WrongLength)?
         }
         let netfn_rqlun = NetfnLun::from(value[1]);
         let rqseq_rslun = NetfnLun::from(value[4]);

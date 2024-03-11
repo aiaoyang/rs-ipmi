@@ -1,7 +1,7 @@
 pub mod v1;
 pub mod v2;
-use crate::err::IpmiHeaderError;
 
+use crate::err::{EIpmiHeader, Error};
 use v1::IpmiV1Header;
 use v2::{IpmiV2Header, PayloadType};
 
@@ -12,13 +12,9 @@ pub enum IpmiHeader {
 }
 
 impl TryFrom<&[u8]> for IpmiHeader {
-    type Error = IpmiHeaderError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() < 10 {
-            Err(IpmiHeaderError::WrongLength)?
-        }
-
         let auth_type: AuthType = value[0].try_into()?;
 
         match auth_type {
@@ -45,7 +41,7 @@ impl IpmiHeader {
         }
     }
 
-    pub fn header_len(first_byte: u8, second_byte: u8) -> Result<usize, IpmiHeaderError> {
+    pub fn header_len(first_byte: u8, second_byte: u8) -> Result<usize, EIpmiHeader> {
         let auth_type: AuthType = first_byte.try_into()?;
         match auth_type {
             AuthType::RmcpPlus => {
@@ -86,7 +82,7 @@ pub enum AuthType {
 }
 
 impl TryFrom<u8> for AuthType {
-    type Error = IpmiHeaderError;
+    type Error = EIpmiHeader;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -96,7 +92,7 @@ impl TryFrom<u8> for AuthType {
             0x04 => Ok(AuthType::PasswordOrKey),
             0x05 => Ok(AuthType::Oem),
             0x06 => Ok(AuthType::RmcpPlus),
-            _ => Err(IpmiHeaderError::UnsupportedAuthType(value)),
+            _ => Err(EIpmiHeader::UnsupportedAuthType(value)),
         }
     }
 }

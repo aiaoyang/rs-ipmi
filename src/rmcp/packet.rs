@@ -1,5 +1,5 @@
 use crate::{
-    err::PacketError,
+    err::{EPacket, Error},
     rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
     CompletionCode, IpmiV2Header,
 };
@@ -16,11 +16,11 @@ pub struct Packet {
 }
 
 impl TryFrom<&[u8]> for Packet {
-    type Error = PacketError;
-    fn try_from(value: &[u8]) -> Result<Self, PacketError> {
+    type Error = Error;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let nbytes: usize = value.len();
         if nbytes < 20 {
-            Err(PacketError::WrongLength)?
+            Err(EPacket::WrongLength)?
         }
         let ipmi_header_len = IpmiHeader::header_len(value[4], value[5])?;
         let ipmi_header: IpmiHeader = value[4..(ipmi_header_len + 4)].try_into()?;
@@ -54,12 +54,12 @@ impl TryFrom<&[u8]> for Packet {
 
 // k2 req
 impl TryFrom<(&[u8], &[u8; 20])> for Packet {
-    type Error = PacketError;
+    type Error = Error;
 
-    fn try_from(value: (&[u8], &[u8; 20])) -> Result<Self, PacketError> {
+    fn try_from(value: (&[u8], &[u8; 20])) -> Result<Self, Self::Error> {
         let nbytes: usize = value.0.len();
         if nbytes < 20 {
-            Err(PacketError::WrongLength)?
+            Err(EPacket::WrongLength)?
         }
         let ipmi_header_len = IpmiHeader::header_len(value.0[4], value.0[5])?;
         let ipmi_header: IpmiHeader = value.0[4..(ipmi_header_len + 4)].try_into()?;
@@ -71,7 +71,7 @@ impl TryFrom<(&[u8], &[u8; 20])> for Packet {
                 let binding = aes_128_cbc_decrypt(
                     &mut value.0[16..16 + payload_length].to_vec(),
                     value.1[..16].try_into().unwrap(),
-                );
+                )?;
                 payload_vec.extend(binding);
             } else {
                 payload_vec.extend_from_slice(&value.0[(nbytes - payload_length)..nbytes])

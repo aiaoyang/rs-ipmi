@@ -4,10 +4,13 @@ use std::{
 };
 
 use crate::{
-    rmcp::{request::ReqPayload, storage::sel::entry::ParseEntryError, IpmiCommand, Payload},
+    commands::CommandCode,
+    err::{ECommand, Error},
+    rmcp::{request::ReqPayload, IpmiCommand, Payload},
     SelEntry,
 };
 
+#[derive(Clone)]
 pub struct GetSelInfo;
 
 #[allow(unused)]
@@ -28,14 +31,13 @@ pub struct SelInfo {
 
 impl IpmiCommand for GetSelInfo {
     type Output = SelInfo;
-
-    type Error = ParseEntryError;
+    type Error = Error;
 
     fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn commnad(&self) -> crate::Command {
+    fn commnad(&self) -> CommandCode {
         0x40.into()
     }
 
@@ -46,7 +48,12 @@ impl IpmiCommand for GetSelInfo {
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
-            Err(ParseEntryError::NotEnoughData(14))?
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(0x40),
+                expected_len: 14,
+                get_len: data.len(),
+                data: data.into(),
+            })?
         }
         Ok(SelInfo {
             sel_version: data[0],
@@ -80,14 +87,12 @@ pub struct GetSelEntry {
 
 impl IpmiCommand for GetSelEntry {
     type Output = SelRecord;
-
-    type Error = ParseEntryError;
-
+    type Error = Error;
     fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn commnad(&self) -> crate::Command {
+    fn commnad(&self) -> CommandCode {
         0x43.into()
     }
 
@@ -112,7 +117,12 @@ impl IpmiCommand for GetSelEntry {
     fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 2 {
             println!("data: {:?}", data);
-            Err(ParseEntryError::NotEnoughData(2))?
+            Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(0x43),
+                expected_len: 2,
+                get_len: data.len(),
+                data: data.into(),
+            })?
         }
         Ok(SelRecord {
             next_record_id: [data[0], data[1]],
