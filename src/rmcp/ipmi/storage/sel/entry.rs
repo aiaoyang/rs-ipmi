@@ -1,7 +1,7 @@
 use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
-    rmcp::storage::sdr::sensor::SensorType,
+    rmcp::storage::sdr::sensor_type::SensorType,
 };
 
 use super::event::{EventDirection, EventGenerator, EventMessageRevision, EventType};
@@ -84,10 +84,10 @@ impl Entry {
         }
     }
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
-        if data.len() < 7 {
+        if data.len() < 16 {
             Err(ECommand::NotEnoughData {
                 command: CommandCode::Raw(0x43),
-                expected_len: 7,
+                expected_len: 16,
                 get_len: data.len(),
                 data: data.into(),
             })?;

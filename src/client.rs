@@ -483,7 +483,7 @@ impl IPMIClient<SessionActived> {
         if !matches!(code, CompletionCode::CompletedNormally) {
             Err(EClient::ParseResponse(code))?
         } else {
-            match <CMD>::parse(data) {
+            match ipmi_cmd.parse(data) {
                 Ok(v) => Ok(v),
                 Err(e) => Err(e.into()),
             }

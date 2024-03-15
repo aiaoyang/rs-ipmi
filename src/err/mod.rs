@@ -16,6 +16,9 @@ pub enum Error {
     Crypto(ECrypto),
     #[error("Try from slice: {0}")]
     TryFromSlice(std::array::TryFromSliceError),
+
+    #[error("Try from u8: {0}")]
+    TryFromU8(u8),
 }
 
 #[derive(ThisError, Debug)]
