@@ -1,8 +1,18 @@
 use std::env;
 
 use rust_ipmi::{
-    commands::{GetSelEntry, GetSelInfo},
-    IPMIClient,
+    commands::{
+        device_sdr::GetDeviceSdrCommand,
+        reading::{GetSensorReading, ThresholdReading},
+        repository::GetSDRRepositoryInfoCommand,
+        reserve_repository::ReserveSDRRepositoryCommand,
+        GetSelEntry, GetSelInfo,
+    },
+    storage::sdr::{
+        record::{RecordContents, SensorRecord},
+        RecordId,
+    },
+    IPMIClient, SessionActived,
 };
 
 #[tokio::main]
@@ -23,6 +33,11 @@ async fn main() -> Result<(), std::io::Error> {
         .map_err(|e| println!("{e:?}"))
         .unwrap();
 
+    get_sdr(&mut c).await;
+    Ok(())
+}
+
+async fn get_sel(c: &mut IPMIClient<SessionActived>) {
     let res = c.send_ipmi_cmd(GetSelInfo).await.unwrap();
 
     let counter = 10;
@@ -42,6 +57,31 @@ async fn main() -> Result<(), std::io::Error> {
         next = u16::from_le_bytes(res.next_record_id);
         println!("{:?}", res.entry.description_with_assetion(),);
     }
+}
 
-    Ok(())
+async fn get_sdr(c: &mut IPMIClient<SessionActived>) {
+    let sdr_repo_info = c.send_ipmi_cmd(GetSDRRepositoryInfoCommand).await.unwrap();
+    println!("sdr repo info: {:?}", sdr_repo_info);
+    let sdr_repo = c.send_ipmi_cmd(ReserveSDRRepositoryCommand).await.unwrap();
+    println!("reserv sdr repo info: {:?}", sdr_repo);
+
+    let mut next_id = RecordId::FIRST;
+    while next_id != RecordId::LAST {
+        let sdr_cmd = GetDeviceSdrCommand::new(None, next_id);
+        let sdr_entry = c.send_ipmi_cmd(sdr_cmd).await.unwrap();
+        next_id = sdr_entry.next_entry;
+
+        if let RecordContents::FullSensor(full) = sdr_entry.record.contents {
+            let value = c
+                .send_ipmi_cmd(GetSensorReading::for_sensor_key(full.key_data()))
+                .await
+                .unwrap();
+            let Some(reading) = ThresholdReading::from(&value).reading else {
+                continue;
+            };
+            if let Some(display) = full.display_reading(reading) {
+                println!("{} \t\t| {}", full.id_string(), display);
+            }
+        }
+    }
 }
