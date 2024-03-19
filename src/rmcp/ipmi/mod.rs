@@ -25,9 +25,9 @@ use super::Payload;
 pub trait IpmiCommand {
     type Output;
     type Error: Into<Error>;
-    fn netfn(&self) -> NetFn;
-    fn commnad(&self) -> CommandCode;
-    fn payload(self) -> Payload;
+    fn netfn() -> NetFn;
+    fn commnad() -> CommandCode;
+    fn payload(&self) -> Payload;
 
     fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, Error> {
         if cc.is_success() {
@@ -36,7 +36,7 @@ pub trait IpmiCommand {
             Err(EIpmiPayload::CompletionCode(cc))?
         }
     }
-    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error>;
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error>;
 }
 
 #[derive(Clone, Debug, Copy, Error)]
@@ -224,12 +224,26 @@ impl From<NetFn> for u8 {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum Lun {
     Bmc,
     Oem1,
     Sms,
     Oem2,
+}
+
+impl TryFrom<u8> for Lun {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Lun::Bmc),
+            1 => Ok(Lun::Oem1),
+            2 => Ok(Lun::Sms),
+            3 => Ok(Lun::Oem2),
+            _ => Err(Error::TryFromU8(value)),
+        }
+    }
 }
 
 impl Lun {

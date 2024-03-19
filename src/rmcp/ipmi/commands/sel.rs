@@ -33,19 +33,19 @@ impl IpmiCommand for GetSelInfo {
     type Output = SelInfo;
     type Error = Error;
 
-    fn netfn(&self) -> crate::NetFn {
+    fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn commnad(&self) -> CommandCode {
+    fn commnad() -> CommandCode {
         0x40.into()
     }
 
-    fn payload(self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.commnad(), Vec::new()))
+    fn payload(&self) -> Payload {
+        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::commnad(), Vec::new()))
     }
 
-    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
             Err(ECommand::NotEnoughData {
@@ -88,15 +88,15 @@ pub struct GetSelEntry {
 impl IpmiCommand for GetSelEntry {
     type Output = SelRecord;
     type Error = Error;
-    fn netfn(&self) -> crate::NetFn {
+    fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn commnad(&self) -> CommandCode {
+    fn commnad() -> CommandCode {
         0x43.into()
     }
 
-    fn payload(self) -> Payload {
+    fn payload(&self) -> Payload {
         let GetSelEntry {
             reservation_id,
             record_id,
@@ -107,14 +107,18 @@ impl IpmiCommand for GetSelEntry {
         let mut data = [0u8; 6];
 
         data[0..2].copy_from_slice(&reservation_id.map(|v| v.get()).unwrap_or(0).to_le_bytes());
-        data[2..4].copy_from_slice(&record_id);
-        data[4] = offset;
+        data[2..4].copy_from_slice(record_id);
+        data[4] = *offset;
         data[5] = bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        crate::rmcp::Payload::IpmiReq(ReqPayload::new(self.netfn(), self.commnad(), data.to_vec()))
+        crate::rmcp::Payload::IpmiReq(ReqPayload::new(
+            Self::netfn(),
+            Self::commnad(),
+            data.to_vec(),
+        ))
     }
 
-    fn parse(data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 2 {
             println!("data: {:?}", data);
             Err(ECommand::NotEnoughData {

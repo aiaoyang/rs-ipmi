@@ -427,7 +427,7 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
 impl IPMIClient<SessionActived> {
     pub async fn deactivated(&mut self) -> Result<()> {
         let cmd = CloseSessionCMD::new(self.session.managed_id);
-        self.send_ipmi_cmd(cmd).await
+        self.send_ipmi_cmd(&cmd).await
     }
     pub async fn send_packet(&mut self, mut request_packet: Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
@@ -464,7 +464,7 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n_bytes].to_vec())
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: CMD) -> Result<CMD::Output> {
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
         let payload = ipmi_cmd.payload();
         let packet = Packet::new(
             RmcpHeader::default(),
@@ -483,7 +483,7 @@ impl IPMIClient<SessionActived> {
         if !matches!(code, CompletionCode::CompletedNormally) {
             Err(EClient::ParseResponse(code))?
         } else {
-            match <CMD>::parse(data) {
+            match ipmi_cmd.parse(data) {
                 Ok(v) => Ok(v),
                 Err(e) => Err(e.into()),
             }

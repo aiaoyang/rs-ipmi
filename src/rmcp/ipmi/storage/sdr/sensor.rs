@@ -1,104 +1,188 @@
-macro_rules ! sensor_type {
-    {
-        pub enum SensorType {
-            $($name:ident = $value:literal,)*
-            [$reserved_range:pat],
-            [$oem_reserved_range:pat],
-        }
-    } => {
-        #[derive(Debug, Clone, Copy)]
-        #[repr(u8)]
-        pub enum SensorType {
-            $($name = $value,)*
-            Reserved(u8),
-            OemReserved(u8),
-        }
+use nonmax::NonMaxU8;
 
-        impl From<u8> for SensorType {
-            fn from(value: u8) -> Self {
-                match value {
-                    $($value => Self::$name,)*
-                    0 | $reserved_range => Self::Reserved(value),
-                    $oem_reserved_range => Self::OemReserved(value),
-                }
-            }
-        }
+use crate::{ECommand, Error, Lun};
 
-        impl From<&SensorType> for u8 {
-            fn from(value: &SensorType) -> u8 {
-                match value {
-                    $(SensorType::$name => $value,)*
-                    SensorType::Reserved(v) => *v,
-                    SensorType::OemReserved(v) => *v,
-                }
-            }
-        }
+use super::Channel;
 
-        impl TryFrom<&str> for SensorType {
-            type Error = ();
+#[derive(Debug, Clone, PartialEq)]
+pub enum SensorId {
+    Unicode(String),
+    BCDPlus(Vec<u8>),
+    Ascii6BPacked(Vec<u8>),
+    Ascii8BAndLatin1(String),
+}
 
-            fn try_from(input: &str) -> Result<Self, Self::Error> {
-                let to_lower = input.to_ascii_lowercase();
+type TypeLengthRaw<'a> = (u8, &'a [u8]);
+impl<'a> From<TypeLengthRaw<'a>> for SensorId {
+    fn from(value: TypeLengthRaw<'a>) -> Self {
+        let (value, data) = value;
+        let type_code = (value >> 6) & 0x3;
 
-                $(
-                    if stringify!($name).to_ascii_lowercase() == to_lower {
-                        return Ok(SensorType::$name);
-                    }
-                )*
+        let length = value & 0x1F;
 
-                Err(())
-            }
+        let data = &data[..(length as usize).min(data.len())];
+
+        let str = core::str::from_utf8(data).map(ToString::to_string);
+
+        match type_code {
+            0b00 => SensorId::Unicode(str.unwrap()),
+            0b01 => SensorId::BCDPlus(data.to_vec()),
+            0b10 => SensorId::Ascii6BPacked(data.to_vec()),
+            0b11 => SensorId::Ascii8BAndLatin1(str.unwrap()),
+            _ => unreachable!(),
         }
     }
 }
 
-sensor_type! {
-    pub enum SensorType {
-        Temperature = 0x01,
-        Voltage = 0x02,
-        Current = 0x03,
-        Fan = 0x04,
-        PhysicalSecurity = 0x05,
-        PlatformSecurity = 0x06,
-        Processor = 0x07,
-        PowerSupply = 0x08,
-        PowerUnit = 0x09,
-        CoolingDevice = 0x0A,
-        UnitsBasedSensor = 0x0B,
-        Memory = 0x0C,
-        DriveSlotBay = 0x0D,
-        PostMemoryResize = 0x0E,
-        SystemFirmware = 0x0F,
-        EventLoggingDisabled = 0x10,
-        Watchdog1 = 0x11,
-        SystemEvent = 0x12,
-        CriticalInterrupt = 0x13,
-        ButtonOrSwitch = 0x14,
-        ModuleOrBoard = 0x15,
-        MicroController = 0x16,
-        AddinCard = 0x17,
-        Chassis = 0x18,
-        ChipSet = 0x19,
-        OtherFRU = 0x1A,
-        CableOrInterconnect = 0x1B,
-        Terminator = 0x1C,
-        SystemBootInitiated = 0x1D,
-        BootError = 0x1E,
-        OsBoot = 0x1F,
-        OsStop = 0x20,
-        SlotOrConnector = 0x21,
-        SystemACPIPowerState = 0x22,
-        Watchdog2 = 0x23,
-        PlatformAlert = 0x24,
-        EntityPresence = 0x25,
-        MonitorAsicOrIc = 0x26,
-        Lan = 0x27,
-        ManagementSubSysHealth = 0x28,
-        Battery = 0x29,
-        SessionAudit = 0x2A,
-        VersionChange = 0x2B,
-        FRUState = 0x2C,
-        [0x2D..=0xBF],
-        [0xC0..=0xFF],
+impl core::fmt::Display for SensorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SensorId::Unicode(v) => write!(f, "{}", v),
+            SensorId::Ascii8BAndLatin1(v) => write!(f, "{}", v),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Default for SensorId {
+    fn default() -> Self {
+        Self::Unicode("".into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SensorNumber(pub NonMaxU8);
+
+impl SensorNumber {
+    pub fn new(value: NonMaxU8) -> Self {
+        Self(value)
+    }
+
+    pub fn get(&self) -> u8 {
+        self.0.get()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SensorOwner {
+    I2C(u8),
+    System(u8),
+}
+
+impl From<u8> for SensorOwner {
+    fn from(value: u8) -> Self {
+        let id = (value & 0xFE) >> 1;
+
+        if (value & 1) == 1 {
+            Self::System(id)
+        } else {
+            Self::I2C(id)
+        }
+    }
+}
+
+impl From<SensorOwner> for u8 {
+    fn from(val: SensorOwner) -> Self {
+        match val {
+            SensorOwner::I2C(id) => (id << 1) & 0xFE,
+            SensorOwner::System(id) => ((id << 1) & 0xFE) | 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SensorKey {
+    pub owner_id: SensorOwner,
+    pub owner_channel: Channel,
+    pub fru_inv_device_owner_lun: Lun,
+    pub owner_lun: Lun,
+    pub sensor_number: SensorNumber,
+}
+
+impl SensorKey {
+    pub fn parse(record_data: &[u8]) -> Result<Self, Error> {
+        if record_data.len() != 3 {
+            Err(ECommand::Parse("SensorKey NotEnoughData: 3".into()))?
+        }
+
+        let owner_id = SensorOwner::from(record_data[0]);
+        let owner_channel_fru_lun = record_data[1];
+        let owner_channel = Channel::new((owner_channel_fru_lun & 0xF0) >> 4).unwrap();
+        let fru_inv_device_owner_lun = Lun::try_from((owner_channel_fru_lun >> 2) & 0x3).unwrap();
+        let owner_lun = Lun::try_from(owner_channel_fru_lun & 0x3).unwrap();
+
+        let sensor_number = SensorNumber(
+            NonMaxU8::new(record_data[2])
+                .ok_or(ECommand::Parse("Create SensorNumber get 0xff".into()))?,
+        );
+
+        Ok(Self {
+            owner_id,
+            owner_channel,
+            fru_inv_device_owner_lun,
+            owner_lun,
+            sensor_number,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Linearization {
+    Linear,
+    Ln,
+    Log10,
+    Log2,
+    E,
+    Exp10,
+    Exp2,
+    OneOverX,
+    Sqr,
+    Cube,
+    Sqrt,
+    CubeRoot,
+    Oem(u8),
+    Unknown(u8),
+}
+
+impl From<u8> for Linearization {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Linear,
+            1 => Self::Ln,
+            2 => Self::Log10,
+            3 => Self::Log2,
+            4 => Self::E,
+            5 => Self::Exp10,
+            6 => Self::Exp2,
+            7 => Self::OneOverX,
+            8 => Self::Sqr,
+            9 => Self::Sqrt,
+            10 => Self::Cube,
+            11 => Self::Sqrt,
+            12 => Self::CubeRoot,
+            0x71..=0x7F => Self::Oem(value),
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Direction {
+    UnspecifiedNotApplicable,
+    Input,
+    Output,
+}
+
+impl TryFrom<u8> for Direction {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let dir = match value {
+            0b00 => Self::UnspecifiedNotApplicable,
+            0b01 => Self::Input,
+            0b10 => Self::Output,
+            _ => return Err(()),
+        };
+        Ok(dir)
     }
 }

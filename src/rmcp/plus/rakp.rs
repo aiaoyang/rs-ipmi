@@ -141,19 +141,40 @@ impl TryFrom<&[u8]> for RAKPMessage2 {
             })?
         }
 
+        let (managed_rnd_number, managed_guid, key_exchange_auth_code) = match value.len() {
+            0..=7 => Err(ECommand::NotEnoughData {
+                command: CommandCode::Raw(1),
+                expected_len: 8,
+                get_len: value.len(),
+                data: value.into(),
+            })?,
+            40 => (
+                u128::from_le_bytes(value[8..24].try_into().unwrap()),
+                u128::from_le_bytes(value[24..40].try_into().unwrap()),
+                None,
+            ),
+            60 => (
+                u128::from_le_bytes(value[8..24].try_into().unwrap()),
+                u128::from_le_bytes(value[24..40].try_into().unwrap()),
+                Some({
+                    let mut arr = [0; 20];
+                    arr.copy_from_slice(&value[40..]);
+                    arr
+                }),
+            ),
+            8 => (0, 0, None),
+            v => {
+                unreachable!("v: {v},data: {:?}", value)
+            }
+        };
+
         Ok(RAKPMessage2 {
             message_tag: value[0],
             status_code: value[1].into(),
-            console_id: u32::from_le_bytes(value[4..8].try_into()?),
-            managed_rnd_number: u128::from_le_bytes(value[8..24].try_into()?),
-            managed_guid: u128::from_le_bytes(value[24..40].try_into()?),
-            key_exchange_auth_code: if value.len() >= 40 {
-                let mut arr = [0; 20];
-                arr.copy_from_slice(&value[40..]);
-                Some(arr)
-            } else {
-                None
-            },
+            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
+            managed_rnd_number,
+            managed_guid,
+            key_exchange_auth_code,
         })
     }
 }
@@ -237,13 +258,20 @@ impl TryFrom<&[u8]> for RAKPMessage4 {
                 data: value.into(),
             })?
         }
+        const EXPECTED_LEN: usize = 8 + 20;
+        let value = if value.len() < EXPECTED_LEN {
+            [value, vec![0; EXPECTED_LEN - value.len()].as_slice()].concat()
+        } else {
+            value.to_vec()
+        };
+
         Ok(RAKPMessage4 {
             message_tag: value[0],
             status_code: value[1].into(),
-            console_id: u32::from_le_bytes(value[4..8].try_into()?),
+            console_id: u32::from_le_bytes(value[4..8].try_into().unwrap()),
             integrity_auth_code: {
-                if value.len() > 8 {
-                    Some(value[8..].try_into()?)
+                if value.len() == 8 {
+                    Some(value[8..].try_into().unwrap())
                 } else {
                     None
                 }

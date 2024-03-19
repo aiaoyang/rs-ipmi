@@ -35,19 +35,19 @@ impl IpmiCommand for IpmiRawCommand {
     type Output = IpmiRawResponse;
     type Error = Error;
 
-    fn netfn(&self) -> crate::NetFn {
+    fn netfn() -> crate::NetFn {
         todo!()
     }
 
-    fn commnad(&self) -> CommandCode {
+    fn commnad() -> CommandCode {
         todo!()
     }
 
-    fn payload(self) -> Payload {
+    fn payload(&self) -> Payload {
         todo!()
     }
 
-    fn parse(data: &[u8]) -> Result<Self::Output, Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 7 {
             Err(Error::Packet(EPacket::IpmiPayload(
                 EIpmiPayload::WrongLength,

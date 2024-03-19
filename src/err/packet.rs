@@ -110,6 +110,11 @@ pub enum ECommand {
     },
     #[error("unknown record type {0}")]
     UnknownRecordType(u8),
+    #[error("unknown sdr sensor type {0}")]
+    UnknownSensorType(u8),
+
+    #[error("parse: {0}")]
+    Parse(String),
 }
 
 impl From<ECommand> for Error {
