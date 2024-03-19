@@ -5,7 +5,7 @@ use nonmax::NonMaxU8;
 use crate::{
     commands::CommandCode,
     request::ReqPayload,
-    storage::sdr::{record::SdrRecord, RecordId},
+    storage::sdr::{RecordId, SdrRecord},
     ECommand, Error, IpmiCommand, Payload,
 };
 
@@ -17,15 +17,10 @@ pub struct GetDeviceSdrCommand {
     bytes_to_read: Option<NonMaxU8>,
 }
 
-impl GetDeviceSdrCommand {
-    pub fn new(reservation_id: Option<NonZeroU16>, record_id: RecordId) -> Self {
-        Self {
-            reservation_id,
-            record_id,
-            offset: 0,
-            bytes_to_read: None,
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct RecordInfo {
+    pub next_entry: RecordId,
+    pub record: SdrRecord,
 }
 
 impl IpmiCommand for GetDeviceSdrCommand {
@@ -34,7 +29,21 @@ impl IpmiCommand for GetDeviceSdrCommand {
     type Error = Error;
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
-        RecordInfo::parse(data, Self::commnad())
+        if data.len() < 2 {
+            Err(ECommand::NotEnoughData {
+                command: Self::commnad(),
+                expected_len: 2,
+                get_len: data.len(),
+                data: data.into(),
+            })?
+        }
+
+        let next_entry = RecordId::new_raw(u16::from_le_bytes([data[0], data[1]]));
+        let data = &data[2..];
+        Ok(RecordInfo {
+            next_entry,
+            record: SdrRecord::parse(data, Self::commnad())?,
+        })
     }
 
     fn netfn() -> crate::NetFn {
@@ -64,28 +73,13 @@ impl IpmiCommand for GetDeviceSdrCommand {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RecordInfo {
-    pub next_entry: RecordId,
-    pub record: SdrRecord,
-}
-
-impl RecordInfo {
-    pub fn parse(data: &[u8], cmd: CommandCode) -> Result<Self, Error> {
-        if data.len() < 2 {
-            Err(ECommand::NotEnoughData {
-                command: cmd,
-                expected_len: 2,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+impl GetDeviceSdrCommand {
+    pub fn new(reservation_id: Option<NonZeroU16>, record_id: RecordId) -> Self {
+        Self {
+            reservation_id,
+            record_id,
+            offset: 0,
+            bytes_to_read: None,
         }
-
-        let next_entry = RecordId::new_raw(u16::from_le_bytes([data[0], data[1]]));
-        let data = &data[2..];
-        Ok(Self {
-            next_entry,
-            record: SdrRecord::parse(data, cmd)?,
-        })
     }
 }

@@ -1,11 +1,17 @@
 use std::num::NonZeroU8;
 
-use super::*;
+use crate::{ECommand, Error};
+
+use super::{
+    capabilities::{EventKind, Threshold, ThresholdKind},
+    common::{IdSettled, SensorRecordCommon},
+    units::{DataFormat, Value},
+    Direction, Linearization, SensorId, SensorRecord,
+};
 
 #[derive(Debug, Clone)]
-
 pub struct FullSensorRecord {
-    common: SensorRecordCommon,
+    common: SensorRecordCommon<IdSettled>,
     pub analog_data_format: Option<DataFormat>,
     pub linearization: Linearization,
     pub m: i16,
@@ -32,15 +38,8 @@ pub struct FullSensorRecord {
     pub oem_data: u8,
 }
 
-// #[derive(Debug, Clone, Copy)]
-// pub enum ParseFullSensorRecordError {
-//     NotEnoughData,
-//     CouldNotParseCommon,
-//     NotEnoughDataAfterCommon,
-// }
-
 impl SensorRecord for FullSensorRecord {
-    fn common(&self) -> &SensorRecordCommon {
+    fn common(&self) -> &SensorRecordCommon<IdSettled> {
         &self.common
     }
 
@@ -67,11 +66,11 @@ impl FullSensorRecord {
             _ => unreachable!(),
         };
 
-        let (mut common, record_data) = SensorRecordCommon::parse_without_id(record_data)?;
+        let (common, record_data) = SensorRecordCommon::parse_without_id(record_data)?;
 
         if record_data.len() < 24 {
             Err(ECommand::Parse(
-                "NotEnoughDataAfterCommon NotEnoughData: 24 byte".into(),
+                "FullSensorRecord NotEnoughDataAfterCommon NotEnoughData: 24 byte".into(),
             ))?;
         }
 
@@ -170,9 +169,9 @@ impl FullSensorRecord {
         let id_string_type_len = record_data[24];
         let id_string_bytes = &record_data[25..];
 
-        let id_string = TypeLengthRaw::new(id_string_type_len, id_string_bytes).into();
+        let id_string: SensorId = (id_string_type_len, id_string_bytes).into();
 
-        common.set_id(id_string);
+        let common = common.set_id(id_string);
 
         Ok(Self {
             common,

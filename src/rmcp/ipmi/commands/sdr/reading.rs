@@ -1,12 +1,14 @@
 use crate::commands::CommandCode;
 use crate::request::ReqPayload;
-use crate::storage::sdr::record::{Address, Channel, SensorKey};
-use crate::{storage::sdr::record::SensorNumber, IpmiCommand};
+use crate::storage::sdr::{Address, Channel, SensorKey};
+use crate::{storage::sdr::SensorNumber, IpmiCommand};
 use crate::{ECommand, Error, Payload};
 
 pub struct GetSensorReading {
     sensor_number: SensorNumber,
+    #[allow(unused)]
     address: Address,
+    #[allow(unused)]
     channel: Channel,
 }
 impl GetSensorReading {
@@ -18,7 +20,7 @@ impl GetSensorReading {
         }
     }
 
-    pub fn for_sensor_key(sensor_key: &SensorKey) -> Self {
+    pub fn form_sensor_key(sensor_key: &SensorKey) -> Self {
         Self {
             sensor_number: sensor_key.sensor_number,
             address: Address(sensor_key.owner_id.into()),
@@ -31,10 +33,6 @@ impl IpmiCommand for GetSensorReading {
     type Output = RawSensorReading;
 
     type Error = Error;
-
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
-        RawSensorReading::parse(data)
-    }
 
     fn netfn() -> crate::NetFn {
         crate::NetFn::SensorEvent
@@ -51,29 +49,8 @@ impl IpmiCommand for GetSensorReading {
             vec![self.sensor_number.get()],
         ))
     }
-}
 
-use crate::storage::sdr::event_reading_type_code::Threshold;
-
-pub trait FromSensorReading {
-    type Sensor;
-
-    fn from(sensor: &Self::Sensor, reading: &RawSensorReading) -> Self;
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct RawSensorReading {
-    reading: u8,
-    all_event_messages_disabled: bool,
-    scanning_disabled: bool,
-    reading_or_state_unavailable: bool,
-    offset_data_1: Option<u8>,
-    #[allow(unused)]
-    offset_data_2: Option<u8>,
-}
-
-impl RawSensorReading {
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 2 {
             Err(ECommand::Parse("RawSensorReading: 2".into()))?
         }
@@ -91,7 +68,7 @@ impl RawSensorReading {
         let offset_data_1 = data.get(2).map(Clone::clone);
         let offset_data_2 = data.get(3).map(Clone::clone);
 
-        Ok(Self {
+        Ok(RawSensorReading {
             reading,
             all_event_messages_disabled,
             scanning_disabled,
@@ -103,13 +80,14 @@ impl RawSensorReading {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ThresholdStatus {
-    pub at_or_above_non_recoverable: bool,
-    pub at_or_above_upper_critical: bool,
-    pub at_or_above_upper_non_critical: bool,
-    pub at_or_below_lower_non_recoverable: bool,
-    pub at_or_below_lower_critical: bool,
-    pub at_or_below_lower_non_critical: bool,
+pub struct RawSensorReading {
+    reading: u8,
+    all_event_messages_disabled: bool,
+    scanning_disabled: bool,
+    reading_or_state_unavailable: bool,
+    offset_data_1: Option<u8>,
+    #[allow(unused)]
+    offset_data_2: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,6 +96,16 @@ pub struct ThresholdReading {
     pub scanning_disabled: bool,
     pub reading: Option<u8>,
     pub threshold_status: Option<ThresholdStatus>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ThresholdStatus {
+    pub at_or_above_non_recoverable: bool,
+    pub at_or_above_upper_critical: bool,
+    pub at_or_above_upper_non_critical: bool,
+    pub at_or_below_lower_non_recoverable: bool,
+    pub at_or_below_lower_critical: bool,
+    pub at_or_below_lower_non_critical: bool,
 }
 
 impl From<&RawSensorReading> for ThresholdReading {
@@ -147,13 +135,5 @@ impl From<&RawSensorReading> for ThresholdReading {
             reading,
             threshold_status,
         }
-    }
-}
-
-impl FromSensorReading for ThresholdReading {
-    type Sensor = Threshold;
-
-    fn from(_: &Self::Sensor, in_reading: &RawSensorReading) -> Self {
-        in_reading.into()
     }
 }

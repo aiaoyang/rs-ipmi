@@ -1,7 +1,7 @@
 use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
-    rmcp::storage::sdr::sensor_type::SensorType,
+    storage::sdr::SensorType,
 };
 
 use super::event::{EventDirection, EventGenerator, EventMessageRevision, EventType};

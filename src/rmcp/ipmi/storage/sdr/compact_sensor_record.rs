@@ -1,4 +1,9 @@
-use super::*;
+use crate::{ECommand, Error};
+
+use super::{
+    common::{IdSettled, SensorRecordCommon},
+    Direction, SensorRecord,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum IdStringModifier {
@@ -16,7 +21,7 @@ pub struct RecordSharing {
 
 #[derive(Debug, Clone)]
 pub struct CompactSensorRecord {
-    common: SensorRecordCommon,
+    common: SensorRecordCommon<IdSettled>,
     pub direction: Direction,
     pub record_sharing: RecordSharing,
     pub positive_going_threshold_hysteresis_value: u8,
@@ -25,7 +30,7 @@ pub struct CompactSensorRecord {
 }
 
 impl SensorRecord for CompactSensorRecord {
-    fn common(&self) -> &SensorRecordCommon {
+    fn common(&self) -> &SensorRecordCommon<IdSettled> {
         &self.common
     }
 
@@ -42,7 +47,7 @@ impl CompactSensorRecord {
             ))?
         }
 
-        let (mut common, record_data) = SensorRecordCommon::parse_without_id(record_data)?;
+        let (common, record_data) = SensorRecordCommon::parse_without_id(record_data)?;
 
         let direction_sharing_1 = record_data[0];
         let direction_sharing_2 = record_data[1];
@@ -74,9 +79,9 @@ impl CompactSensorRecord {
 
         let id_string_type_len = record_data[8];
         let id_string_bytes = &record_data[9..];
-        let id_string = TypeLengthRaw::new(id_string_type_len, id_string_bytes).into();
+        let id_string = (id_string_type_len, id_string_bytes).into();
 
-        common.set_id(id_string);
+        let common = common.set_id(id_string);
 
         Ok(Self {
             common,
