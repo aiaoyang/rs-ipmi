@@ -27,6 +27,9 @@ impl Value {
             self.units.base_unit.display(short, self.value)
         }
     }
+    pub fn value(&self) -> f32 {
+        self.value
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -243,6 +243,11 @@ impl FullSensorRecord {
         Some(Value::new(self.common().sensor_units, value))
     }
 
+    // human readable value
+    pub fn h_value(&self, value: u8) -> Option<f32> {
+        self.convert(value).map(|v| v.value())
+    }
+
     pub fn display_reading(&self, value: u8) -> Option<String> {
         self.convert(value).map(|v| v.display(true))
     }

@@ -432,6 +432,7 @@ impl IPMIClient<SessionActived> {
     pub async fn send_packet(&mut self, mut request_packet: Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
+        self.session.seq_number += 1;
 
         let payload_bytes: Vec<u8> = request_packet.payload.into();
         let encrypted_payload =
@@ -449,7 +450,6 @@ impl IPMIClient<SessionActived> {
             .send(&packet_vec)
             .await
             .map_err(EClient::FailedSend)?;
-        self.session.seq_number += 1;
 
         let mut buf = [0; 1024];
 
@@ -493,15 +493,16 @@ impl IPMIClient<SessionActived> {
     pub async fn send_packet_retry(
         &mut self,
         request_packet: Packet,
-        retry_n: u8,
+        mut retry_n: u8,
     ) -> Result<Vec<u8>> {
         // let mut res: Result<CMD::Output>;
-        for i in 0..retry_n {
+        while retry_n != 0 {
+            retry_n -= 1;
             let res = self.send_packet(request_packet.clone()).await;
             if res.is_ok() {
                 return res;
             }
-            if i == retry_n - 1 {
+            if retry_n == 0 {
                 return res;
             }
             tokio::time::sleep(Duration::from_secs(3)).await;
