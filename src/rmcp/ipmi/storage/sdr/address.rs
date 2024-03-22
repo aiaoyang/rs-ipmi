@@ -11,10 +11,10 @@ impl ChannelNumber {
     ///
     /// This function returns `None` if `value > 0xB`
     pub fn new(value: NonZeroU8) -> Option<Self> {
-        if value.get() <= 0xB {
-            Some(Self(value))
-        } else {
+        if value.get() > 0xB {
             None
+        } else {
+            Some(Self(value))
         }
     }
 

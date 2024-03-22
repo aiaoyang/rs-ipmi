@@ -94,7 +94,6 @@ impl SensorRecordCommon<IdUnset> {
             sensor_type: ty,
             event_reading_type_code,
             sensor_units,
-            _p,
             ..
         } = self;
         SensorRecordCommon {
