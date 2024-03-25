@@ -1,3 +1,5 @@
+use core::fmt;
+
 pub use app::channel::*;
 pub use app::cipher::*;
 pub use sdr::*;
@@ -46,6 +48,15 @@ impl From<CommandCode> for u8 {
     }
 }
 
+impl fmt::Display for CommandCode{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self{
+            CommandCode::Raw(value) => f.write_fmt(format_args!("0x{:X}",value)),
+            _=>f.write_fmt(format_args!("{:?}",self))
+        }
+    }
+}
+
 pub struct CloseSessionCMD(u32);
 impl CloseSessionCMD {
     pub fn new(session_id: u32) -> Self {
@@ -54,7 +65,6 @@ impl CloseSessionCMD {
 }
 impl IpmiCommand for CloseSessionCMD {
     type Output = ();
-    type Error = Error;
 
     fn netfn() -> crate::NetFn {
         crate::NetFn::App
@@ -77,7 +87,7 @@ impl IpmiCommand for CloseSessionCMD {
         ))
     }
 
-    fn parse(&self, _data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, _data: &[u8]) -> Result<Self::Output, Error> {
         Ok(())
     }
 }

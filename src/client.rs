@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::{error, info};
+use log::info;
 use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
         response::RespPayload,
         CompletionCode, Packet, Payload,
     },
-    IpmiCommand, IpmiHeader, IpmiV2Header, NetFn, RmcpHeader,
+    IpmiCommand, NetFn,
 };
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -425,29 +425,36 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
 }
 
 impl IPMIClient<SessionActived> {
+    fn encrypt_packet(&self, mut req_packet: Packet) -> Vec<u8> {
+        let payload_bytes: Vec<u8> = req_packet.payload.into();
+        let encrypted_payload =
+            aes_128_cbc_encrypt(payload_bytes, self.session.k2[..16].try_into().unwrap());
+
+        req_packet
+            .ipmi_header
+            .set_payload_len(encrypted_payload.len());
+        let mut packet_vec: Vec<u8> = (&req_packet.rmcp_header).into();
+        let mut session_payload_slice: Vec<u8> = req_packet.ipmi_header.into();
+        session_payload_slice.extend(encrypted_payload);
+        add_tailer(&mut session_payload_slice, self.session.k1);
+        packet_vec.extend(session_payload_slice);
+        packet_vec
+    }
+
     pub async fn deactivated(&mut self) -> Result<()> {
         let cmd = CloseSessionCMD::new(self.session.managed_id);
         self.send_ipmi_cmd(&cmd).await
     }
+
     pub async fn send_packet(&mut self, mut request_packet: Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
         self.session.seq_number += 1;
 
-        let payload_bytes: Vec<u8> = request_packet.payload.into();
-        let encrypted_payload =
-            aes_128_cbc_encrypt(payload_bytes, self.session.k2[..16].try_into().unwrap());
+        let packet_slice = self.encrypt_packet(request_packet);
 
-        request_packet
-            .ipmi_header
-            .set_payload_len(encrypted_payload.len());
-        let mut packet_vec: Vec<u8> = (&request_packet.rmcp_header).into();
-        let mut session_payload_vec: Vec<u8> = request_packet.ipmi_header.into();
-        session_payload_vec.extend(encrypted_payload);
-        add_tailer(&mut session_payload_vec, self.session.k1);
-        packet_vec.extend(session_payload_vec);
         self.client_socket
-            .send(&packet_vec)
+            .send(&packet_slice)
             .await
             .map_err(EClient::FailedSend)?;
 
@@ -464,31 +471,26 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n_bytes].to_vec())
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
-        let payload = ipmi_cmd.payload();
-        let packet = Packet::new(
-            RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
-            payload,
-        );
-        let resp: Packet = (
+    async fn send_and_decrypt_packet(&mut self, packet: Packet) -> Result<Packet> {
+        Packet::try_from((
             self.send_packet_retry(packet, 3).await?.as_slice(),
             &self.session.k2,
-        )
-            .try_into()
-            .unwrap();
+        ))
+    }
 
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
+        let packet = ipmi_cmd.gen_packet();
+        let resp = self.send_and_decrypt_packet(packet).await?;
         let (data, code) = resp.payload.data_and_completion();
 
-        if !matches!(code, CompletionCode::CompletedNormally) {
-            error!("command: {:?}",<CMD as IpmiCommand>::command());
-            Err(EClient::CompletionCode(code))?
-        } else {
-            match ipmi_cmd.parse(data) {
-                Ok(v) => Ok(v),
-                Err(e) => Err(e.into()),
-            }
-        }
+        let CompletionCode::CompletedNormally = code else {
+            Err(EClient::CompletionCode {
+                cmd: <CMD as IpmiCommand>::command(),
+                code,
+            })?
+        };
+
+        ipmi_cmd.parse(data)
     }
 
     pub async fn send_packet_retry(

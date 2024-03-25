@@ -52,7 +52,7 @@ impl TryFrom<&[u8]> for Packet {
     }
 }
 
-// k2 req
+// k2 req, (payload, key)
 impl TryFrom<(&[u8], &[u8; 20])> for Packet {
     type Error = Error;
 

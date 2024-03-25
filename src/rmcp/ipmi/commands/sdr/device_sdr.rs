@@ -26,9 +26,7 @@ pub struct RecordInfo {
 impl IpmiCommand for GetDeviceSdrCommand {
     type Output = RecordInfo;
 
-    type Error = Error;
-
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             Err(ECommand::NotEnoughData {
                 command: Self::command(),

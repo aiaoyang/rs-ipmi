@@ -32,8 +32,6 @@ impl GetSensorReading {
 impl IpmiCommand for GetSensorReading {
     type Output = RawSensorReading;
 
-    type Error = Error;
-
     fn netfn() -> crate::NetFn {
         crate::NetFn::SensorEvent
     }
@@ -50,7 +48,7 @@ impl IpmiCommand for GetSensorReading {
         ))
     }
 
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             Err(ECommand::Parse("RawSensorReading: 2".into()))?
         }

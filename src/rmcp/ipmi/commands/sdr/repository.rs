@@ -14,8 +14,6 @@ pub struct SDRRepositoryInfo {
 impl IpmiCommand for GetSDRRepositoryInfoCommand {
     type Output = SDRRepositoryInfo;
 
-    type Error = Error;
-
     fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
     }
@@ -28,7 +26,7 @@ impl IpmiCommand for GetSDRRepositoryInfoCommand {
         Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
 
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
             Err(ECommand::NotEnoughData {
@@ -44,41 +42,3 @@ impl IpmiCommand for GetSDRRepositoryInfoCommand {
         })
     }
 }
-
-// #[derive(Debug)]
-// pub enum SdrSensorType {
-//     FullSensor = 0x01,
-//     CompactSensor = 0x02,
-//     EventOnlySensor = 0x03,
-//     EntityAssociation = 0x08,
-//     DeviceEntityAssociation = 0x09,
-//     GenericDeviceLocator = 0x10,
-//     FRUDeviceLocator = 0x11,
-//     MCDeviceLocator = 0x12,
-//     MCConfirmation = 0x13,
-//     BMCMessageChannelInfo = 0x14,
-//     Oem = 0xc0,
-// }
-
-// impl TryFrom<u8> for SdrSensorType {
-//     type Error = Error;
-
-//     fn try_from(value: u8) -> Result<Self, Self::Error> {
-//         match value as isize {
-//             0x01 => Ok(SdrSensorType::FullSensor),
-//             0x02 => Ok(SdrSensorType::CompactSensor),
-//             0x03 => Ok(SdrSensorType::EventOnlySensor),
-//             0x08 => Ok(SdrSensorType::EntityAssociation),
-//             0x09 => Ok(SdrSensorType::DeviceEntityAssociation),
-//             0x10 => Ok(SdrSensorType::GenericDeviceLocator),
-//             0x11 => Ok(SdrSensorType::FRUDeviceLocator),
-//             0x12 => Ok(SdrSensorType::MCDeviceLocator),
-//             0x13 => Ok(SdrSensorType::MCConfirmation),
-//             0x14 => Ok(SdrSensorType::BMCMessageChannelInfo),
-//             0xc0 => Ok(SdrSensorType::Oem),
-//             _ => Err(ECommand::UnknownSensorType(value))?,
-//         }
-//     }
-// }
-
-// use crate::connection::{IpmiCommand, Message, NetFn, ParseResponseError};

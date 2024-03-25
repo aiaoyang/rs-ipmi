@@ -17,8 +17,6 @@ pub struct AllocInfo {
 impl IpmiCommand for GetAllocInfo {
     type Output = AllocInfo;
 
-    type Error = Error;
-
     fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
     }
@@ -30,7 +28,7 @@ impl IpmiCommand for GetAllocInfo {
     fn payload(&self) -> crate::Payload {
         Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 8 {
             Err(ECommand::NotEnoughData {
                 command: Self::command(),

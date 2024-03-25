@@ -15,6 +15,8 @@ use std::fmt;
 
 use thiserror::Error;
 
+use crate::Packet;
+use crate::RmcpHeader;
 use crate::{
     commands::CommandCode,
     err::{ECommand, EIpmiPayload, Error},
@@ -24,7 +26,6 @@ use super::Payload;
 
 pub trait IpmiCommand {
     type Output;
-    type Error: Into<Error>;
     fn netfn() -> NetFn;
     fn command() -> CommandCode;
     fn payload(&self) -> Payload;
@@ -36,7 +37,16 @@ pub trait IpmiCommand {
             Err(EIpmiPayload::CompletionCode(cc))?
         }
     }
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error>;
+
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error>;
+
+    fn gen_packet(&self) -> Packet {
+        Packet::new(
+            RmcpHeader::default(),
+            IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
+            self.payload(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Copy, Error)]

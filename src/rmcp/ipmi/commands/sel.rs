@@ -31,7 +31,6 @@ pub struct SelInfo {
 
 impl IpmiCommand for GetSelInfo {
     type Output = SelInfo;
-    type Error = Error;
 
     fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
@@ -45,11 +44,11 @@ impl IpmiCommand for GetSelInfo {
         Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
 
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
             Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x40),
+                command: Self::command(),
                 expected_len: 14,
                 get_len: data.len(),
                 data: data.into(),
@@ -87,7 +86,6 @@ pub struct GetSelEntry {
 
 impl IpmiCommand for GetSelEntry {
     type Output = SelRecord;
-    type Error = Error;
     fn netfn() -> crate::NetFn {
         crate::NetFn::Storage
     }
@@ -118,11 +116,11 @@ impl IpmiCommand for GetSelEntry {
         ))
     }
 
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             println!("data: {:?}", data);
             Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x43),
+                command: Self::command(),
                 expected_len: 2,
                 get_len: data.len(),
                 data: data.into(),
@@ -142,7 +140,7 @@ impl GetSelEntry {
             reservation_id: NonZeroU16::new(reservation_id),
             record_id: u16::to_le_bytes(record_id),
             offset,
-            bytes_to_read: NonZeroU8::new(0xff),
+            bytes_to_read: NonZeroU8::new(0xFF),
         }
     }
 }

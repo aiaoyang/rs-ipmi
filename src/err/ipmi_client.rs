@@ -2,7 +2,7 @@ use std::{io, num::TryFromIntError};
 
 use thiserror::Error as ThisError;
 
-use crate::{err::Error, rmcp::open_session::StatusCode, CompletionCode};
+use crate::{commands::CommandCode, err::Error, rmcp::open_session::StatusCode, CompletionCode};
 
 #[derive(ThisError, Debug)]
 pub enum EClient {
@@ -33,8 +33,11 @@ pub enum EClient {
     #[error("Session not established yet")]
     SessionNotEstablishedYet,
 
-    #[error("CompletionCode: {0:?}")]
-    CompletionCode(#[from] CompletionCode),
+    #[error("CompletionCode: {self}")]
+    CompletionCode {
+        cmd: CommandCode,
+        code: CompletionCode,
+    },
 }
 
 impl From<EClient> for Error {

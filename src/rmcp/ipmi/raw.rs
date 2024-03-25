@@ -33,7 +33,6 @@ use crate::err::Error;
 
 impl IpmiCommand for IpmiRawCommand {
     type Output = IpmiRawResponse;
-    type Error = Error;
 
     fn netfn() -> crate::NetFn {
         todo!()
