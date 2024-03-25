@@ -38,14 +38,14 @@ impl IpmiCommand for GetSensorReading {
         crate::NetFn::SensorEvent
     }
 
-    fn commnad() -> crate::commands::CommandCode {
+    fn command() -> crate::commands::CommandCode {
         CommandCode::Raw(0x2d)
     }
 
     fn payload(&self) -> crate::Payload {
         Payload::IpmiReq(ReqPayload::new(
             Self::netfn(),
-            Self::commnad(),
+            Self::command(),
             vec![self.sensor_number.get()],
         ))
     }

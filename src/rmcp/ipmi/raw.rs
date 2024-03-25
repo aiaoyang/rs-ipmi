@@ -39,7 +39,7 @@ impl IpmiCommand for IpmiRawCommand {
         todo!()
     }
 
-    fn commnad() -> CommandCode {
+    fn command() -> CommandCode {
         todo!()
     }
 

@@ -26,7 +26,7 @@ pub trait IpmiCommand {
     type Output;
     type Error: Into<Error>;
     fn netfn() -> NetFn;
-    fn commnad() -> CommandCode;
+    fn command() -> CommandCode;
     fn payload(&self) -> Payload;
 
     fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, Error> {

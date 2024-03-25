@@ -33,8 +33,8 @@ pub enum EClient {
     #[error("Session not established yet")]
     SessionNotEstablishedYet,
 
-    #[error("Parse Response error: {0:?}")]
-    ParseResponse(#[from] CompletionCode),
+    #[error("CompletionCode: {0:?}")]
+    CompletionCode(#[from] CompletionCode),
 }
 
 impl From<EClient> for Error {

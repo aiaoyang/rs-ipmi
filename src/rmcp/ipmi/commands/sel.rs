@@ -37,12 +37,12 @@ impl IpmiCommand for GetSelInfo {
         crate::NetFn::Storage
     }
 
-    fn commnad() -> CommandCode {
+    fn command() -> CommandCode {
         0x40.into()
     }
 
     fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::commnad(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
@@ -92,7 +92,7 @@ impl IpmiCommand for GetSelEntry {
         crate::NetFn::Storage
     }
 
-    fn commnad() -> CommandCode {
+    fn command() -> CommandCode {
         0x43.into()
     }
 
@@ -113,7 +113,7 @@ impl IpmiCommand for GetSelEntry {
 
         crate::rmcp::Payload::IpmiReq(ReqPayload::new(
             Self::netfn(),
-            Self::commnad(),
+            Self::command(),
             data.to_vec(),
         ))
     }

@@ -16,12 +16,12 @@ impl IpmiCommand for ReserveSDRRepositoryCommand {
         crate::NetFn::Storage
     }
 
-    fn commnad() -> CommandCode {
+    fn command() -> CommandCode {
         CommandCode::Raw(0x22)
     }
 
     fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::commnad(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {

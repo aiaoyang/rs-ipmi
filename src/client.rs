@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::info;
+use log::{error, info};
 use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
@@ -481,7 +481,8 @@ impl IPMIClient<SessionActived> {
         let (data, code) = resp.payload.data_and_completion();
 
         if !matches!(code, CompletionCode::CompletedNormally) {
-            Err(EClient::ParseResponse(code))?
+            error!("command: {:?}",<CMD as IpmiCommand>::command());
+            Err(EClient::CompletionCode(code))?
         } else {
             match ipmi_cmd.parse(data) {
                 Ok(v) => Ok(v),

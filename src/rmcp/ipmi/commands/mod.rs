@@ -60,14 +60,14 @@ impl IpmiCommand for CloseSessionCMD {
         crate::NetFn::App
     }
 
-    fn commnad() -> CommandCode {
+    fn command() -> CommandCode {
         0x3c.into()
     }
 
     fn payload(&self) -> Payload {
         Payload::IpmiReq(ReqPayload::new(
             Self::netfn(),
-            Self::commnad(),
+            Self::command(),
             vec![
                 self.0 as u8,
                 (self.0 >> 8) as u8,

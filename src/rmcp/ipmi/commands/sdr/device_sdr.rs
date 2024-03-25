@@ -31,7 +31,7 @@ impl IpmiCommand for GetDeviceSdrCommand {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 2 {
             Err(ECommand::NotEnoughData {
-                command: Self::commnad(),
+                command: Self::command(),
                 expected_len: 2,
                 get_len: data.len(),
                 data: data.into(),
@@ -42,7 +42,7 @@ impl IpmiCommand for GetDeviceSdrCommand {
         let data = &data[2..];
         Ok(RecordInfo {
             next_entry,
-            record: SdrRecord::parse(data, Self::commnad())?,
+            record: SdrRecord::parse(data, Self::command())?,
         })
     }
 
@@ -50,7 +50,7 @@ impl IpmiCommand for GetDeviceSdrCommand {
         crate::NetFn::Storage
     }
 
-    fn commnad() -> crate::commands::CommandCode {
+    fn command() -> crate::commands::CommandCode {
         CommandCode::Raw(0x23)
     }
 
@@ -69,7 +69,7 @@ impl IpmiCommand for GetDeviceSdrCommand {
         data[4] = self.offset;
         data[5] = self.bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::commnad(), data))
+        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), data))
     }
 }
 

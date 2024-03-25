@@ -23,17 +23,17 @@ impl IpmiCommand for GetAllocInfo {
         crate::NetFn::Storage
     }
 
-    fn commnad() -> crate::commands::CommandCode {
+    fn command() -> crate::commands::CommandCode {
         crate::commands::CommandCode::Raw(0x21)
     }
 
     fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::commnad(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
     }
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Self::Error> {
         if data.len() < 8 {
             Err(ECommand::NotEnoughData {
-                command: Self::commnad(),
+                command: Self::command(),
                 expected_len: 8,
                 get_len: data.len(),
                 data: data.into(),
