@@ -1,7 +1,7 @@
 use crate::commands::CommandCode;
 use crate::err::{ECommand, Error};
 use crate::request::ReqPayload;
-use crate::{IpmiCommand, Payload};
+use crate::{ECommandCode, IpmiCommand, Payload};
 pub struct GetSDRRepositoryInfoCommand;
 
 #[derive(Debug)]
@@ -29,12 +29,12 @@ impl IpmiCommand for GetSDRRepositoryInfoCommand {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x20),
-                expected_len: 14,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(0x20),
+                14,
+                data.len(),
+                data.into(),
+            )))?
         }
         Ok(SDRRepositoryInfo {
             sdr_version: data[0],

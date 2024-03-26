@@ -1,4 +1,3 @@
-use core::fmt;
 
 pub use app::channel::*;
 pub use app::cipher::*;
@@ -48,14 +47,6 @@ impl From<CommandCode> for u8 {
     }
 }
 
-impl fmt::Display for CommandCode{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self{
-            CommandCode::Raw(value) => f.write_fmt(format_args!("0x{:X}",value)),
-            _=>f.write_fmt(format_args!("{:?}",self))
-        }
-    }
-}
 
 pub struct CloseSessionCMD(u32);
 impl CloseSessionCMD {

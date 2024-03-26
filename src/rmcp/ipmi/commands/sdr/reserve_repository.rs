@@ -1,4 +1,6 @@
-use crate::{commands::CommandCode, request::ReqPayload, ECommand, Error, IpmiCommand, Payload};
+use crate::{
+    commands::CommandCode, request::ReqPayload, ECommand, ECommandCode, Error, IpmiCommand, Payload,
+};
 
 pub struct ReserveSDRRepositoryCommand;
 
@@ -25,12 +27,12 @@ impl IpmiCommand for ReserveSDRRepositoryCommand {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             println!("data: {:?}", data);
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x22),
-                expected_len: 2,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(0x22),
+                2,
+                data.len(),
+                data.into(),
+            )))?
         }
         Ok(ReserveSDRRepository {
             reservation_id: u16::from_le_bytes([data[0], data[1]]),

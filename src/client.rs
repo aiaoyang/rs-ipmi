@@ -53,7 +53,6 @@ impl Default for SessionInactived {
             managed_system_guid: Default::default(),
             remote_console_session_id: Default::default(),
             remote_console_random_number: 0,
-            // remote_console_random_number: rand::random::<u128>(),
             password_mac_key: Default::default(),
             sik: Default::default(),
             k1: Default::default(),
@@ -87,7 +86,6 @@ pub struct IPMIClient<S> {
     privilege: Privilege,
     username: String,
     cipher_list_index: u8,
-    buf: [u8; 8192],
 }
 
 impl IPMIClient<SessionInactived> {
@@ -121,7 +119,6 @@ impl IPMIClient<SessionInactived> {
             username: String::new(),
             cipher_list_index: 0,
             privilege: Privilege::Callback,
-            buf: [0; 8192],
         })
     }
     /// Set the read timeout on the ipmi client UDP socket. Default timeout for the socket is set to 20 seconds
@@ -419,14 +416,13 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
             privilege: inactive.privilege,
             username: inactive.username,
             cipher_list_index: inactive.cipher_list_index,
-            buf: inactive.buf,
         }
     }
 }
 
 impl IPMIClient<SessionActived> {
-    fn encrypt_packet(&self, mut req_packet: Packet) -> Vec<u8> {
-        let payload_bytes: Vec<u8> = req_packet.payload.into();
+    fn encrypt_packet(&self, req_packet: &mut Packet) -> Vec<u8> {
+        let payload_bytes: Vec<u8> = req_packet.payload.clone().into();
         let encrypted_payload =
             aes_128_cbc_encrypt(payload_bytes, self.session.k2[..16].try_into().unwrap());
 
@@ -441,12 +437,19 @@ impl IPMIClient<SessionActived> {
         packet_vec
     }
 
-    pub async fn deactivated(&mut self) -> Result<()> {
+    pub async fn deactivated(mut self) -> Result<IPMIClient<SessionInactived>> {
         let cmd = CloseSessionCMD::new(self.session.managed_id);
-        self.send_ipmi_cmd(&cmd).await
+        self.send_ipmi_cmd(&cmd).await?;
+        Ok(IPMIClient {
+            client_socket: self.client_socket,
+            session: SessionInactived::default(),
+            privilege: self.privilege,
+            username: self.username,
+            cipher_list_index: self.cipher_list_index,
+        })
     }
 
-    pub async fn send_packet(&mut self, mut request_packet: Packet) -> Result<Vec<u8>> {
+    pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
         self.session.seq_number += 1;
@@ -458,7 +461,7 @@ impl IPMIClient<SessionActived> {
             .await
             .map_err(EClient::FailedSend)?;
 
-        let mut buf = [0; 1024];
+        let mut buf = vec![0; 1024];
 
         let n_bytes = match self.client_socket.recv_from(&mut buf).await {
             Ok((nbytes, _)) => nbytes,
@@ -471,7 +474,8 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n_bytes].to_vec())
     }
 
-    async fn send_and_decrypt_packet(&mut self, packet: Packet) -> Result<Packet> {
+    #[inline(always)]
+    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
         Packet::try_from((
             self.send_packet_retry(packet, 3).await?.as_slice(),
             &self.session.k2,
@@ -479,8 +483,8 @@ impl IPMIClient<SessionActived> {
     }
 
     pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
-        let packet = ipmi_cmd.gen_packet();
-        let resp = self.send_and_decrypt_packet(packet).await?;
+        let mut packet = ipmi_cmd.gen_packet();
+        let resp = self.send_and_decrypt_packet(&mut packet).await?;
         let (data, code) = resp.payload.data_and_completion();
 
         let CompletionCode::CompletedNormally = code else {
@@ -495,13 +499,13 @@ impl IPMIClient<SessionActived> {
 
     pub async fn send_packet_retry(
         &mut self,
-        request_packet: Packet,
+        request_packet: &mut Packet,
         mut retry_n: u8,
     ) -> Result<Vec<u8>> {
         // let mut res: Result<CMD::Output>;
         while retry_n != 0 {
             retry_n -= 1;
-            let res = self.send_packet(request_packet.clone()).await;
+            let res = self.send_packet(request_packet).await;
             if res.is_ok() {
                 return res;
             }
@@ -520,8 +524,8 @@ impl IPMIClient<SessionActived> {
             Vec::new()
         };
 
-        let raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
-        let response = self.send_packet_retry(raw_request, 3).await?;
+        let mut raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
+        let response = self.send_packet_retry(&mut raw_request, 3).await?;
         let packet: Packet = (response.as_slice(), &self.session.k2).try_into().unwrap();
         let Payload::IpmiResp(payload) = packet.payload else {
             info!("send raw request");
@@ -535,7 +539,7 @@ impl IPMIClient<SessionActived> {
         // Set session privilege level to ADMIN
         let pri = &self.privilege;
         if !matches!(pri, Privilege::Administrator) {
-            let set_session_req = IpmiRawRequest::new(
+            let mut set_session_req = IpmiRawRequest::new(
                 NetFn::App,
                 CommandCode::SetSessionPrivilegeLevel,
                 vec![Privilege::Administrator as u8],
@@ -543,7 +547,7 @@ impl IPMIClient<SessionActived> {
             .create_packet();
 
             let set_session_response: Packet = (
-                self.send_packet(set_session_req).await?.as_slice(),
+                self.send_packet(&mut set_session_req).await?.as_slice(),
                 &self.session.k2,
             )
                 .try_into()

@@ -1,6 +1,6 @@
 use std::num::NonZeroU16;
 
-use crate::{request::ReqPayload, ECommand, Error, IpmiCommand, Payload};
+use crate::{request::ReqPayload, ECommand, ECommandCode, Error, IpmiCommand, Payload};
 
 #[derive(Clone, Copy, Debug)]
 pub struct GetAllocInfo;
@@ -30,12 +30,12 @@ impl IpmiCommand for GetAllocInfo {
     }
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 8 {
-            Err(ECommand::NotEnoughData {
-                command: Self::command(),
-                expected_len: 8,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                Self::command(),
+                8,
+                data.len(),
+                data.into(),
+            )))?
         }
 
         let num_alloc_units = NonZeroU16::new(u16::from_le_bytes([data[0], data[1]]));

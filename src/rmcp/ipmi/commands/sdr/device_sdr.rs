@@ -6,7 +6,7 @@ use crate::{
     commands::CommandCode,
     request::ReqPayload,
     storage::sdr::{RecordId, SdrRecord},
-    ECommand, Error, IpmiCommand, Payload,
+    ECommand, ECommandCode, Error, IpmiCommand, Payload,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -28,12 +28,12 @@ impl IpmiCommand for GetDeviceSdrCommand {
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
-            Err(ECommand::NotEnoughData {
-                command: Self::command(),
-                expected_len: 2,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                Self::command(),
+                2,
+                data.len(),
+                data.into(),
+            )))?
         }
 
         let next_entry = RecordId::new_raw(u16::from_le_bytes([data[0], data[1]]));

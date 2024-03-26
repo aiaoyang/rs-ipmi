@@ -2,10 +2,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    commands::CommandCode,
-    err::{ECommand, EIpmiPayload, EPacket},
-    rmcp::{request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload, RmcpHeader},
-    u8_ms_bit, NetFn,
+    commands::CommandCode, err::{ECommand, EIpmiPayload, EPacket}, rmcp::{request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload, RmcpHeader}, u8_ms_bit, ECommandCode, NetFn
 };
 
 #[derive(Clone)]
@@ -76,12 +73,12 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::GetChannelAuthCapabilities,
-                expected_len: 8,
-                get_len: value.len(),
-                data: value.into(),
-            })?
+            Err(ECommand::NotEnoughData (ECommandCode::new(
+                 CommandCode::GetChannelAuthCapabilities,
+                 8,
+                 value.len(),
+                 value.into(),
+            )))?
         }
         Ok(GetChannelAuthCapabilitiesResponse {
             channel_number: value[0],

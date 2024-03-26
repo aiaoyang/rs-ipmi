@@ -101,13 +101,8 @@ pub enum ECommand {
     UnknownIntegrityAlgorithm(u8),
     #[error("unknown confidentiality algorithm {0}")]
     UnknownConfidentialityAlgorithm(u8),
-    #[error("not enough data {:?}", self)]
-    NotEnoughData {
-        command: CommandCode,
-        expected_len: u8,
-        get_len: usize,
-        data: Vec<u8>,
-    },
+    #[error("{0:?}")]
+    NotEnoughData(ECommandCode),
     #[error("unknown record type {0}")]
     UnknownRecordType(u8),
     #[error("unknown sdr sensor type {0}")]
@@ -120,5 +115,24 @@ pub enum ECommand {
 impl From<ECommand> for Error {
     fn from(value: ECommand) -> Self {
         Error::Packet(EPacket::IpmiPayload(EIpmiPayload::Command(value)))
+    }
+}
+
+#[derive(Debug)]
+pub struct ECommandCode {
+    pub command: CommandCode,
+    pub expected_len: u8,
+    pub get_len: usize,
+    pub data: Vec<u8>,
+}
+
+impl ECommandCode {
+    pub fn new(command: CommandCode, expected_len: u8, get_len: usize, data: Vec<u8>) -> Self {
+        Self {
+            command,
+            expected_len,
+            get_len,
+            data,
+        }
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
     rmcp::{request::ReqPayload, IpmiCommand, Payload},
-    SelEntry,
+    ECommandCode, SelEntry,
 };
 
 #[derive(Clone)]
@@ -47,12 +47,12 @@ impl IpmiCommand for GetSelInfo {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
             println!("data: {:?}", data);
-            Err(ECommand::NotEnoughData {
-                command: Self::command(),
-                expected_len: 14,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                Self::command(),
+                14,
+                data.len(),
+                data.into(),
+            )))?
         }
         Ok(SelInfo {
             sel_version: data[0],
@@ -119,12 +119,12 @@ impl IpmiCommand for GetSelEntry {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             println!("data: {:?}", data);
-            Err(ECommand::NotEnoughData {
-                command: Self::command(),
-                expected_len: 2,
-                get_len: data.len(),
-                data: data.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                Self::command(),
+                2,
+                data.len(),
+                data.into(),
+            )))?
         }
         Ok(SelRecord {
             next_record_id: [data[0], data[1]],

@@ -2,6 +2,7 @@ use crate::{
     commands::{CommandCode, Privilege},
     err::{ECommand, Error},
     rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader},
+    ECommandCode,
 };
 
 use super::open_session::StatusCode;
@@ -133,21 +134,21 @@ impl TryFrom<&[u8]> for RAKPMessage2 {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(1),
-                expected_len: 8,
-                get_len: value.len(),
-                data: value.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(1),
+                8,
+                value.len(),
+                value.into(),
+            )))?
         }
 
         let (managed_rnd_number, managed_guid, key_exchange_auth_code) = match value.len() {
-            0..=7 => Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(1),
-                expected_len: 8,
-                get_len: value.len(),
-                data: value.into(),
-            })?,
+            0..=7 => Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(1),
+                8,
+                value.len(),
+                value.into(),
+            )))?,
             40 => (
                 u128::from_le_bytes(value[8..24].try_into().unwrap()),
                 u128::from_le_bytes(value[24..40].try_into().unwrap()),
@@ -251,12 +252,12 @@ impl TryFrom<&[u8]> for RAKPMessage4 {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(3),
-                expected_len: 8,
-                get_len: value.len(),
-                data: value.into(),
-            })?
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(3),
+                8,
+                value.len(),
+                value.into(),
+            )))?
         }
         const EXPECTED_LEN: usize = 8 + 20;
         let value = if value.len() < EXPECTED_LEN {

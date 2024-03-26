@@ -2,6 +2,7 @@ use crate::{
     commands::{CommandCode, Privilege},
     err::{ECommand, Error},
     rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader},
+    ECommandCode,
 };
 
 #[derive(Clone, Debug)]
@@ -219,12 +220,9 @@ impl TryFrom<&[u8]> for RMCPPlusOpenSessionResponse {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < 33 {
-            Err(Self::Error::from(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0),
-                expected_len: 33,
-                get_len: value.len(),
-                data: value.into(),
-            }))?
+            Err(Self::Error::from(ECommand::NotEnoughData(
+                ECommandCode::new(CommandCode::Raw(0), 33, value.len(), value.into()),
+            )))?
         }
         Ok(RMCPPlusOpenSessionResponse {
             message_tag: value[0],

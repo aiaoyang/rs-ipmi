@@ -19,7 +19,7 @@ use self::{
     capabilities::SensorCapabilities,
     common::{IdSettled, SensorRecordCommon},
 };
-use crate::{commands::CommandCode, ECommand, Error};
+use crate::{commands::CommandCode, ECommand, ECommandCode, Error};
 
 pub trait SensorRecord {
     fn common(&self) -> &SensorRecordCommon<IdSettled>;
@@ -119,12 +119,12 @@ impl SdrRecord {
 
     pub fn parse(data: &[u8], cmd: CommandCode) -> Result<Self, Error> {
         if data.len() < 5 {
-            return Err(ECommand::NotEnoughData {
-                command: cmd,
-                expected_len: 5,
-                get_len: data.len(),
-                data: data.into(),
-            })?;
+            return Err(ECommand::NotEnoughData(ECommandCode::new(
+                cmd,
+                5,
+                data.len(),
+                data.into(),
+            )))?;
         }
 
         let record_id = RecordId::new_raw(u16::from_le_bytes([data[0], data[1]]));
@@ -135,12 +135,12 @@ impl SdrRecord {
 
         let record_data = &data[5..];
         if record_data.len() != record_length as usize {
-            return Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x23),
-                expected_len: record_length,
-                get_len: data.len(),
-                data: data.into(),
-            })?;
+            return Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(0x23),
+                record_length,
+                data.len(),
+                data.into(),
+            )))?;
         }
 
         let contents = if record_type == 0x01 {

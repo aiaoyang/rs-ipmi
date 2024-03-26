@@ -2,6 +2,7 @@ use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
     storage::sdr::SensorType,
+    ECommandCode,
 };
 
 use super::event::{EventDirection, EventGenerator, EventMessageRevision, EventType};
@@ -85,12 +86,12 @@ impl Entry {
     }
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
         if data.len() < 16 {
-            Err(ECommand::NotEnoughData {
-                command: CommandCode::Raw(0x43),
-                expected_len: 16,
-                get_len: data.len(),
-                data: data.into(),
-            })?;
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                CommandCode::Raw(0x43),
+                16,
+                data.len(),
+                data.into(),
+            )))?;
         }
 
         let record_id = RecordId(u16::from_le_bytes([data[0], data[1]]));
