@@ -449,6 +449,45 @@ impl IPMIClient<SessionActived> {
         })
     }
 
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
+        let mut packet = ipmi_cmd.gen_packet();
+        let resp = self.send_and_decrypt_packet(&mut packet).await?;
+        let (data, code) = resp.payload.data_and_completion();
+
+        let CompletionCode::CompletedNormally = code else {
+            Err(EClient::CompletionCode((
+                <CMD as IpmiCommand>::command(),
+                code,
+            )))?
+        };
+
+        ipmi_cmd.parse(data)
+    }
+
+    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
+        Packet::try_from((
+            self.send_packet_retry(packet, 3).await?.as_slice(),
+            &self.session.k2,
+        ))
+    }
+
+    pub async fn send_packet_retry(
+        &mut self,
+        request_packet: &mut Packet,
+        mut retry_n: u8,
+    ) -> Result<Vec<u8>> {
+        // let mut res: Result<CMD::Output>;
+        while retry_n != 0 {
+            retry_n -= 1;
+            let res = self.send_packet(request_packet).await;
+            if res.is_ok() || retry_n == 0 {
+                return res;
+            }
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+        Err(EClient::NoResponse)?
+    }
+
     pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
@@ -474,49 +513,6 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n_bytes].to_vec())
     }
 
-    #[inline(always)]
-    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
-        Packet::try_from((
-            self.send_packet_retry(packet, 3).await?.as_slice(),
-            &self.session.k2,
-        ))
-    }
-
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
-        let mut packet = ipmi_cmd.gen_packet();
-        let resp = self.send_and_decrypt_packet(&mut packet).await?;
-        let (data, code) = resp.payload.data_and_completion();
-
-        let CompletionCode::CompletedNormally = code else {
-            Err(EClient::CompletionCode {
-                cmd: <CMD as IpmiCommand>::command(),
-                code,
-            })?
-        };
-
-        ipmi_cmd.parse(data)
-    }
-
-    pub async fn send_packet_retry(
-        &mut self,
-        request_packet: &mut Packet,
-        mut retry_n: u8,
-    ) -> Result<Vec<u8>> {
-        // let mut res: Result<CMD::Output>;
-        while retry_n != 0 {
-            retry_n -= 1;
-            let res = self.send_packet(request_packet).await;
-            if res.is_ok() {
-                return res;
-            }
-            if retry_n == 0 {
-                return res;
-            }
-            tokio::time::sleep(Duration::from_secs(3)).await;
-        }
-        Err(EClient::NoResponse)?
-    }
-
     pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
         let send_data = if data.len() > 2 {
             data[2..].to_vec()
@@ -524,7 +520,8 @@ impl IPMIClient<SessionActived> {
             Vec::new()
         };
 
-        let mut raw_request: Packet = IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
+        let mut raw_request: Packet =
+            IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
         let response = self.send_packet_retry(&mut raw_request, 3).await?;
         let packet: Packet = (response.as_slice(), &self.session.k2).try_into().unwrap();
         let Payload::IpmiResp(payload) = packet.payload else {

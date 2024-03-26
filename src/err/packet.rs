@@ -73,7 +73,7 @@ pub enum EV1Header {
 pub enum EIpmiPayload {
     #[error("IpmiPayload should be at least 7 bytes")]
     WrongLength,
-    #[error("CompletionCode unsucceed: {0}")]
+    #[error("CompletionCode unsucceed: {0:?}")]
     CompletionCode(CompletionCode),
     #[error("Command Error: {0}")]
     Command(ECommand),

@@ -33,11 +33,8 @@ pub enum EClient {
     #[error("Session not established yet")]
     SessionNotEstablishedYet,
 
-    #[error("CompletionCode: {self}")]
-    CompletionCode {
-        cmd: CommandCode,
-        code: CompletionCode,
-    },
+    #[error("CompletionCode: {0:?}")]
+    CompletionCode((CommandCode, CompletionCode)),
 }
 
 impl From<EClient> for Error {

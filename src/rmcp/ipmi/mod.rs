@@ -11,10 +11,6 @@ pub mod storage;
 mod header;
 mod payload;
 
-use std::fmt;
-
-use thiserror::Error;
-
 use crate::Packet;
 use crate::RmcpHeader;
 use crate::{
@@ -49,7 +45,7 @@ pub trait IpmiCommand {
     }
 }
 
-#[derive(Clone, Debug, Copy, Error)]
+#[derive(Clone, Debug, Copy)]
 pub enum CompletionCode {
     CompletedNormally,
     NodeBusy,
@@ -79,12 +75,6 @@ pub enum CompletionCode {
     OEM(u8),
     CommandCode(u8),
     Reserved(u8),
-}
-
-impl std::fmt::Display for CompletionCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self))
-    }
 }
 
 impl From<u8> for CompletionCode {
