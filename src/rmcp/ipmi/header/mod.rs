@@ -69,6 +69,13 @@ impl IpmiHeader {
             IpmiHeader::V2_0(a) => a.payload_length.into(),
         }
     }
+
+    pub fn seq_num(&self) -> u32 {
+        match self{
+            IpmiHeader::V1_5(h) => h.session_seq_number,
+            IpmiHeader::V2_0(h) => h.session_seq_number, 
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

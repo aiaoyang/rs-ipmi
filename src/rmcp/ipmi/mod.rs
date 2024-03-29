@@ -22,8 +22,8 @@ use super::Payload;
 
 pub trait IpmiCommand {
     type Output;
-    fn netfn() -> NetFn;
-    fn command() -> CommandCode;
+    fn netfn(&self) -> NetFn;
+    fn command(&self) -> CommandCode;
     fn payload(&self) -> Payload;
 
     fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, Error> {

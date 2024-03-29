@@ -32,23 +32,22 @@ pub struct SelInfo {
 impl IpmiCommand for GetSelInfo {
     type Output = SelInfo;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         0x40.into()
     }
 
     fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
-            println!("data: {:?}", data);
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                Self::command(),
+                self.command(),
                 14,
                 data.len(),
                 data.into(),
@@ -86,11 +85,11 @@ pub struct GetSelEntry {
 
 impl IpmiCommand for GetSelEntry {
     type Output = SelRecord;
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         0x43.into()
     }
 
@@ -110,17 +109,16 @@ impl IpmiCommand for GetSelEntry {
         data[5] = bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
         crate::rmcp::Payload::IpmiReq(ReqPayload::new(
-            Self::netfn(),
-            Self::command(),
+            self.netfn(),
+            self.command(),
             data.to_vec(),
         ))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
-            println!("data: {:?}", data);
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                Self::command(),
+                self.command(),
                 2,
                 data.len(),
                 data.into(),

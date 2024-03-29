@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::info;
+use log::{error, info, warn};
 use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
@@ -81,10 +81,11 @@ impl From<SessionInactived> for SessionActived {
 
 #[derive(Debug)]
 pub struct IPMIClient<S> {
-    client_socket: tokio::net::UdpSocket,
+    client_socket: Box<UdpSocket>,
     session: S,
     privilege: Privilege,
-    username: String,
+    username: Box<str>,
+    password: Box<str>,
     cipher_list_index: u8,
 }
 
@@ -114,9 +115,10 @@ impl IPMIClient<SessionInactived> {
             .await
             .map_err(EClient::ConnectToIPMIServer)?;
         Ok(IPMIClient {
-            client_socket,
+            client_socket: Box::from(client_socket),
             session: SessionInactived::default(),
-            username: String::new(),
+            username: Box::from(""),
+            password: Box::from(""),
             cipher_list_index: 0,
             privilege: Privilege::Callback,
         })
@@ -167,7 +169,8 @@ impl IPMIClient<SessionInactived> {
         username: &str,
         password: &str,
     ) -> Result<IPMIClient<SessionActived>> {
-        self.username = username.to_string();
+        self.username = Box::from(username);
+        self.password = Box::from(password);
         self.session.password_mac_key = Some(password.into());
 
         self.get_channel_auth_cap().await?; // Get channel auth capabilites and set cipher
@@ -266,7 +269,7 @@ impl IPMIClient<SessionInactived> {
             self.session.remote_console_random_number,
             false,
             Privilege::Administrator,
-            self.username.clone(),
+            self.username.to_string(),
         );
         let rakp1_packet: Packet = rk1.into();
 
@@ -415,6 +418,7 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
             session: inactive.session.into(),
             privilege: inactive.privilege,
             username: inactive.username,
+            password: inactive.password,
             cipher_list_index: inactive.cipher_list_index,
         }
     }
@@ -437,28 +441,24 @@ impl IPMIClient<SessionActived> {
         packet_vec
     }
 
-    pub async fn deactivated(mut self) -> Result<IPMIClient<SessionInactived>> {
-        let cmd = CloseSessionCMD::new(self.session.managed_id);
-        self.send_ipmi_cmd(&cmd).await?;
-        Ok(IPMIClient {
-            client_socket: self.client_socket,
-            session: SessionInactived::default(),
-            privilege: self.privilege,
-            username: self.username,
-            cipher_list_index: self.cipher_list_index,
-        })
-    }
-
     pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
         let mut packet = ipmi_cmd.gen_packet();
         let resp = self.send_and_decrypt_packet(&mut packet).await?;
         let (data, code) = resp.payload.data_and_completion();
+        if let Some(resp_cmd) = resp.payload.command() {
+            if ipmi_cmd.command() != resp_cmd {
+                error!(
+                    "req packet command: {:?}, seq: {}, resp command: {:?}, seq: {}",
+                    packet.payload.command(),
+                    packet.ipmi_header.seq_num(),
+                    resp.payload.command(),
+                    resp.ipmi_header.seq_num(),
+                )
+            }
+        }
 
         let CompletionCode::CompletedNormally = code else {
-            Err(EClient::CompletionCode((
-                <CMD as IpmiCommand>::command(),
-                code,
-            )))?
+            Err(EClient::CompletionCode((ipmi_cmd.command(), code)))?
         };
 
         ipmi_cmd.parse(data)
@@ -476,13 +476,13 @@ impl IPMIClient<SessionActived> {
         request_packet: &mut Packet,
         mut retry_n: u8,
     ) -> Result<Vec<u8>> {
-        // let mut res: Result<CMD::Output>;
         while retry_n != 0 {
             retry_n -= 1;
             let res = self.send_packet(request_packet).await;
             if res.is_ok() || retry_n == 0 {
                 return res;
             }
+            warn!("retry packet : {:?}", request_packet.payload.command());
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
         Err(EClient::NoResponse)?
@@ -491,8 +491,7 @@ impl IPMIClient<SessionActived> {
     pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
-        self.session.seq_number += 1;
-
+        self.session.seq_number = self.session.seq_number.wrapping_add(1);
         let packet_slice = self.encrypt_packet(request_packet);
 
         self.client_socket
@@ -500,7 +499,7 @@ impl IPMIClient<SessionActived> {
             .await
             .map_err(EClient::FailedSend)?;
 
-        let mut buf = vec![0; 1024];
+        let mut buf = [0; 1 << 11];
 
         let n_bytes = match self.client_socket.recv_from(&mut buf).await {
             Ok((nbytes, _)) => nbytes,
@@ -529,6 +528,23 @@ impl IPMIClient<SessionActived> {
             Err(EClient::NoResponse)?
         };
         Ok(payload)
+    }
+
+    pub async fn deactivated(&mut self) -> Result<()> {
+        let cmd = CloseSessionCMD::new(self.session.managed_id);
+        self.send_ipmi_cmd(&cmd).await?;
+        Ok(())
+    }
+
+    // bug: inspur and dell bmc sometimes response with irelevent request commandcode, when this situation happened, we need reconnect
+    pub async fn re_connect(&mut self) -> Result<()> {
+        let addr = self.client_socket.peer_addr().unwrap();
+        warn!("reconnect: {}", addr);
+        *self = IPMIClient::new(addr)
+            .await?
+            .activate(&self.username, &self.password)
+            .await?;
+        Ok(())
     }
 
     #[allow(unused)]

@@ -1,7 +1,5 @@
 use crate::{
-    err::{EPacket, Error},
-    rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
-    CompletionCode, IpmiV2Header,
+    commands::CommandCode, err::{EPacket, Error}, rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader}, CompletionCode, IpmiV2Header
 };
 
 use super::{
@@ -180,6 +178,14 @@ impl Payload {
             (data, *completion_code)
         } else {
             (&[], CompletionCode::CompletedNormally)
+        }
+    }
+
+    pub fn command(&self) -> Option<CommandCode> {
+        match self {
+            Payload::IpmiResp(p) => Some(p.command),
+            Payload::IpmiReq(p) => Some(p.command),
+            _ => None,
         }
     }
 }

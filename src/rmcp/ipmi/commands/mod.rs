@@ -1,4 +1,3 @@
-
 pub use app::channel::*;
 pub use app::cipher::*;
 pub use sdr::*;
@@ -14,7 +13,7 @@ use crate::{
     IpmiCommand,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandCode {
     Raw(u8),
     GetChannelAuthCapabilities,
@@ -47,7 +46,6 @@ impl From<CommandCode> for u8 {
     }
 }
 
-
 pub struct CloseSessionCMD(u32);
 impl CloseSessionCMD {
     pub fn new(session_id: u32) -> Self {
@@ -57,18 +55,18 @@ impl CloseSessionCMD {
 impl IpmiCommand for CloseSessionCMD {
     type Output = ();
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::App
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         0x3c.into()
     }
 
     fn payload(&self) -> Payload {
         Payload::IpmiReq(ReqPayload::new(
-            Self::netfn(),
-            Self::command(),
+            self.netfn(),
+            self.command(),
             vec![
                 self.0 as u8,
                 (self.0 >> 8) as u8,

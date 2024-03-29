@@ -12,21 +12,20 @@ pub struct ReserveSDRRepository {
 impl IpmiCommand for ReserveSDRRepositoryCommand {
     type Output = ReserveSDRRepository;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         CommandCode::Raw(0x22)
     }
 
     fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
-            println!("data: {:?}", data);
             Err(ECommand::NotEnoughData(ECommandCode::new(
                 CommandCode::Raw(0x22),
                 2,

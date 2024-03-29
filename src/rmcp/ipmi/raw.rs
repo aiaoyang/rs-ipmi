@@ -34,11 +34,11 @@ use crate::err::Error;
 impl IpmiCommand for IpmiRawCommand {
     type Output = IpmiRawResponse;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         todo!()
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         todo!()
     }
 

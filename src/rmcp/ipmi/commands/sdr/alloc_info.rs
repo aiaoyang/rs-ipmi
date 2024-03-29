@@ -17,21 +17,21 @@ pub struct AllocInfo {
 impl IpmiCommand for GetAllocInfo {
     type Output = AllocInfo;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn command() -> crate::commands::CommandCode {
+    fn command(&self) -> crate::commands::CommandCode {
         crate::commands::CommandCode::Raw(0x21)
     }
 
     fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
     }
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 8 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                Self::command(),
+                self.command(),
                 8,
                 data.len(),
                 data.into(),

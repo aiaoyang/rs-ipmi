@@ -32,18 +32,18 @@ impl GetSensorReading {
 impl IpmiCommand for GetSensorReading {
     type Output = RawSensorReading;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::SensorEvent
     }
 
-    fn command() -> crate::commands::CommandCode {
+    fn command(&self) -> crate::commands::CommandCode {
         CommandCode::Raw(0x2d)
     }
 
     fn payload(&self) -> crate::Payload {
         Payload::IpmiReq(ReqPayload::new(
-            Self::netfn(),
-            Self::command(),
+            self.netfn(),
+            self.command(),
             vec![self.sensor_number.get()],
         ))
     }
@@ -51,6 +51,9 @@ impl IpmiCommand for GetSensorReading {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             Err(ECommand::Parse("RawSensorReading: 2".into()))?
+        }
+        if data.len() > 4 {
+            Err(ECommand::Parse(format!("RawSensorReading: {}", data.len())))?
         }
 
         let reading = data[0];

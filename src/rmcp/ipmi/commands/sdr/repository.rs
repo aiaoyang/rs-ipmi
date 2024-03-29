@@ -14,21 +14,20 @@ pub struct SDRRepositoryInfo {
 impl IpmiCommand for GetSDRRepositoryInfoCommand {
     type Output = SDRRepositoryInfo;
 
-    fn netfn() -> crate::NetFn {
+    fn netfn(&self) -> crate::NetFn {
         crate::NetFn::Storage
     }
 
-    fn command() -> CommandCode {
+    fn command(&self) -> CommandCode {
         CommandCode::Raw(0x20)
     }
 
     fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(Self::netfn(), Self::command(), Vec::new()))
+        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
     }
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
-            println!("data: {:?}", data);
             Err(ECommand::NotEnoughData(ECommandCode::new(
                 CommandCode::Raw(0x20),
                 14,
