@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct GetDeviceSdrCommand {
+pub struct GetDeviceSdr {
     reservation_id: Option<NonZeroU16>,
     record_id: RecordId,
     offset: u8,
@@ -23,7 +23,7 @@ pub struct RecordInfo {
     pub record: SdrRecord,
 }
 
-impl IpmiCommand for GetDeviceSdrCommand {
+impl IpmiCommand for GetDeviceSdr {
     type Output = RecordInfo;
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
@@ -71,7 +71,7 @@ impl IpmiCommand for GetDeviceSdrCommand {
     }
 }
 
-impl GetDeviceSdrCommand {
+impl GetDeviceSdr {
     pub fn new(reservation_id: Option<NonZeroU16>, record_id: RecordId) -> Self {
         Self {
             reservation_id,

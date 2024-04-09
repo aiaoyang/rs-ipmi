@@ -4,14 +4,14 @@ use crate::storage::sdr::{Address, Channel, SensorKey};
 use crate::{storage::sdr::SensorNumber, IpmiCommand};
 use crate::{ECommand, Error, Payload};
 
-pub struct GetSensorReading {
+pub struct GetRawSensorReading {
     sensor_number: SensorNumber,
     #[allow(unused)]
     address: Address,
     #[allow(unused)]
     channel: Channel,
 }
-impl GetSensorReading {
+impl GetRawSensorReading {
     pub fn new(sensor_number: SensorNumber, address: Address, channel: Channel) -> Self {
         Self {
             sensor_number,
@@ -29,7 +29,7 @@ impl GetSensorReading {
     }
 }
 
-impl IpmiCommand for GetSensorReading {
+impl IpmiCommand for GetRawSensorReading {
     type Output = RawSensorReading;
 
     fn netfn(&self) -> crate::NetFn {

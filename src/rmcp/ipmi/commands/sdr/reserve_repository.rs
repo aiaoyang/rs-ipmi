@@ -2,14 +2,14 @@ use crate::{
     commands::CommandCode, request::ReqPayload, ECommand, ECommandCode, Error, IpmiCommand, Payload,
 };
 
-pub struct ReserveSDRRepositoryCommand;
+pub struct GetReserveSDRRepository;
 
 #[derive(Debug)]
 pub struct ReserveSDRRepository {
     pub reservation_id: u16,
 }
 
-impl IpmiCommand for ReserveSDRRepositoryCommand {
+impl IpmiCommand for GetReserveSDRRepository {
     type Output = ReserveSDRRepository;
 
     fn netfn(&self) -> crate::NetFn {

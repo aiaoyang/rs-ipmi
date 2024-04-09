@@ -2,7 +2,7 @@ use crate::commands::CommandCode;
 use crate::err::{ECommand, Error};
 use crate::request::ReqPayload;
 use crate::{ECommandCode, IpmiCommand, Payload};
-pub struct GetSDRRepositoryInfoCommand;
+pub struct GetSDRRepositoryInfo;
 
 #[derive(Debug)]
 pub struct SDRRepositoryInfo {
@@ -11,7 +11,7 @@ pub struct SDRRepositoryInfo {
     pub record_count: u16,
 }
 
-impl IpmiCommand for GetSDRRepositoryInfoCommand {
+impl IpmiCommand for GetSDRRepositoryInfo {
     type Output = SDRRepositoryInfo;
 
     fn netfn(&self) -> crate::NetFn {
