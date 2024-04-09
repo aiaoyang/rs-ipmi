@@ -2,10 +2,10 @@ use std::{env, time::Duration};
 
 use rust_ipmi::{
     commands::{
-        device_sdr::GetDeviceSdrCommand,
-        reading::{GetSensorReading, ThresholdReading},
-        repository::GetSDRRepositoryInfoCommand,
-        reserve_repository::ReserveSDRRepositoryCommand,
+        device_sdr::GetDeviceSdr,
+        reading::{GetRawSensorReading, ThresholdReading},
+        repository::GetSDRRepositoryInfo,
+        reserve_repository::GetReserveSDRRepository,
         GetSelEntry, GetSelInfo,
     },
     storage::sdr::{RecordId, SensorRecord},
@@ -101,22 +101,22 @@ async fn get_sel(c: &mut IPMIClient<SessionActived>) {
 }
 
 async fn get_sdr<F: Fn(&str) -> bool>(c: &mut IPMIClient<SessionActived>, retain: F) {
-    let sdr_repo_info = c.send_ipmi_cmd(&GetSDRRepositoryInfoCommand).await.unwrap();
+    let sdr_repo_info = c.send_ipmi_cmd(&GetSDRRepositoryInfo).await.unwrap();
     println!("sdr repo info: {:?}", sdr_repo_info);
-    let sdr_repo = c.send_ipmi_cmd(&ReserveSDRRepositoryCommand).await.unwrap();
+    let sdr_repo = c.send_ipmi_cmd(&GetReserveSDRRepository).await.unwrap();
     println!("reserv sdr repo info: {:?}", sdr_repo);
 
     let mut cmds = Vec::new();
     let mut next_id = RecordId::FIRST;
     while next_id != RecordId::LAST {
-        let sdr_cmd = GetDeviceSdrCommand::new(None, next_id);
+        let sdr_cmd = GetDeviceSdr::new(None, next_id);
         let sdr_entry = c.send_ipmi_cmd(&sdr_cmd).await.unwrap();
         next_id = sdr_entry.next_entry;
 
         if let Some(full) = sdr_entry.record.full_sensor() {
             cmds.push((
                 full.clone(),
-                GetSensorReading::form_sensor_key(full.key_data()),
+                GetRawSensorReading::form_sensor_key(full.key_data()),
             ));
         };
     }
