@@ -1,3 +1,5 @@
+use std::io;
+
 pub use ipmi_client::*;
 pub use packet::*;
 
@@ -19,6 +21,9 @@ pub enum Error {
 
     #[error("Try from u8: {0}")]
     TryFromU8(u8),
+    
+    #[error("io: {0}")]
+    IoTimeOut(std::io::Error),
 }
 
 #[derive(ThisError, Debug)]
@@ -42,5 +47,11 @@ impl From<aes::cipher::block_padding::UnpadError> for Error {
 impl From<std::array::TryFromSliceError> for Error {
     fn from(value: std::array::TryFromSliceError) -> Self {
         Self::TryFromSlice(value)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Self::IoTimeOut(value)
     }
 }
