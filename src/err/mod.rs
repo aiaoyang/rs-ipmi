@@ -23,7 +23,10 @@ pub enum Error {
     TryFromU8(u8),
     
     #[error("io: {0}")]
-    IoTimeOut(std::io::Error),
+    Io(std::io::Error),
+
+    #[error("timeout")]
+    Timeout(tokio::time::error::Elapsed)
 }
 
 #[derive(ThisError, Debug)]
@@ -52,6 +55,12 @@ impl From<std::array::TryFromSliceError> for Error {
 
 impl From<io::Error> for Error {
     fn from(value: io::Error) -> Self {
-        Self::IoTimeOut(value)
+        Self::Io(value)
+    }
+}
+
+impl From<tokio::time::error::Elapsed> for Error {
+    fn from(value: tokio::time::error::Elapsed) -> Self {
+        Self::Timeout(value)
     }
 }

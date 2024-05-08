@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use log::{error, info, warn};
 use tokio::net::{ToSocketAddrs, UdpSocket};
@@ -500,23 +500,12 @@ impl IPMIClient<SessionActived> {
             .map_err(EClient::FailedSend)?;
 
         let mut buf = Vec::with_capacity(1024);
-        let udpsock_read_timeout = Duration::from_secs(3);
-        let start = Instant::now();
-        loop {
-            // Try to recv data, this may still fail with `WouldBlock`
-            // if the readiness event is a false positive.
-            match self.client_socket.try_recv_buf(&mut buf) {
-                Ok(n) => {
-                    return Ok(buf[..n].to_vec());
-                }
-                Err(e) => {
-                    if Instant::now().duration_since(start) > udpsock_read_timeout {
-                        Err(e)?
-                    }
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(3)).await;
-        }
+        let n = tokio::time::timeout(
+            Duration::from_secs(3),
+            self.client_socket.recv_buf(&mut buf),
+        )
+        .await??;
+        Ok(buf[..n].to_vec())
     }
 
     pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
