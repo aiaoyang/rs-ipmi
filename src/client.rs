@@ -485,6 +485,7 @@ impl IPMIClient<SessionActived> {
             warn!("retry packet : {:?}", request_packet.payload.command());
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
+        self.re_connect().await?;
         Err(EClient::NoResponse)?
     }
 
