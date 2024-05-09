@@ -79,6 +79,7 @@ impl From<SessionInactived> for SessionActived {
     }
 }
 
+/// default retry_duration is 300ms
 #[derive(Debug)]
 pub struct IPMIClient<S> {
     client_socket: Box<UdpSocket>,
@@ -87,6 +88,8 @@ pub struct IPMIClient<S> {
     username: Box<str>,
     password: Box<str>,
     cipher_list_index: u8,
+    retry: u8,
+    retry_duration: Duration,
 }
 
 impl IPMIClient<SessionInactived> {
@@ -121,7 +124,19 @@ impl IPMIClient<SessionInactived> {
             password: Box::from(""),
             cipher_list_index: 0,
             privilege: Privilege::Callback,
+            retry: 0,
+            retry_duration: Duration::from_millis(300),
         })
+    }
+
+    pub fn retry(mut self, n: u8) -> Self {
+        self.retry = n;
+        self
+    }
+
+    pub fn retry_duration(mut self, duration: Duration) -> Self {
+        self.retry_duration = duration;
+        self
     }
     /// Set the read timeout on the ipmi client UDP socket. Default timeout for the socket is set to 20 seconds
     ///
@@ -182,7 +197,7 @@ impl IPMIClient<SessionInactived> {
         let get_channel_auth_cap_packet =
             GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator)
                 .create_packet();
-        self.send_unauth_packet_retry(get_channel_auth_cap_packet, 3)
+        self.send_unauth_packet_retry(get_channel_auth_cap_packet)
             .await?;
 
         Ok(())
@@ -251,7 +266,7 @@ impl IPMIClient<SessionInactived> {
         )
         .into();
         let osr = self
-            .send_unauth_packet_retry(rmcp_plus_open_session_packet, 3)
+            .send_unauth_packet_retry(rmcp_plus_open_session_packet)
             .await?;
         let Payload::Rmcp(RMCPPlusOpenSession::Response(msg)) = osr.payload else {
             Err(EClient::MisformedResponse)?
@@ -274,7 +289,7 @@ impl IPMIClient<SessionInactived> {
         let rakp1_packet: Packet = rk1.into();
 
         // RAKP Message 2
-        let r2_pkt = self.send_unauth_packet_retry(rakp1_packet, 3).await?;
+        let r2_pkt = self.send_unauth_packet_retry(rakp1_packet).await?;
         let Payload::Rakp(Rakp::Message2(msg2)) = &r2_pkt.payload else {
             Err(EClient::MisformedResponse)?
         };
@@ -311,7 +326,7 @@ impl IPMIClient<SessionInactived> {
         .into();
 
         // RAKP Message 4
-        let r4_pkt = self.send_unauth_packet_retry(rakp3_packet, 3).await?;
+        let r4_pkt = self.send_unauth_packet_retry(rakp3_packet).await?;
 
         let Payload::Rakp(Rakp::Message4(msg4)) = r4_pkt.payload else {
             Err(EClient::MisformedResponse)?
@@ -347,20 +362,16 @@ impl IPMIClient<SessionInactived> {
             None => Ok(Packet::try_from(&buf[..n_bytes])?),
         }
     }
-    async fn send_unauth_packet_retry(
-        &mut self,
-        request_packet: Packet,
-        retry_n: u8,
-    ) -> Result<Packet> {
-        for i in 0..retry_n {
+    async fn send_unauth_packet_retry(&mut self, request_packet: Packet) -> Result<Packet> {
+        let mut n: i32 = self.retry as i32;
+        while n >= 0 {
             let res = self.send_unauth_packet(request_packet.clone()).await;
-            if res.is_ok() {
+            if res.is_ok() || n == 0 {
                 return res;
             }
-            if i == retry_n - 1 {
-                return res;
-            }
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            warn!("retry packet: {:?}", request_packet.ipmi_header.payload_type());
+            tokio::time::sleep(self.retry_duration).await;
+            n -= 1;
         }
         Err(EClient::NoResponse)?
     }
@@ -420,6 +431,8 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
             username: inactive.username,
             password: inactive.password,
             cipher_list_index: inactive.cipher_list_index,
+            retry: inactive.retry,
+            retry_duration: inactive.retry_duration,
         }
     }
 }
@@ -441,7 +454,10 @@ impl IPMIClient<SessionActived> {
         packet_vec
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(
+        &mut self,
+        ipmi_cmd: &CMD,
+    ) -> Result<CMD::Output> {
         let mut packet = ipmi_cmd.gen_packet();
         let resp = self.send_and_decrypt_packet(&mut packet).await?;
         let (data, code) = resp.payload.data_and_completion();
@@ -464,9 +480,12 @@ impl IPMIClient<SessionActived> {
         ipmi_cmd.parse(data)
     }
 
-    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
+    async fn send_and_decrypt_packet(
+        &mut self,
+        packet: &mut Packet,
+    ) -> Result<Packet> {
         Packet::try_from((
-            self.send_packet_retry(packet, 3).await?.as_slice(),
+            self.send_packet_retry(packet).await?.as_slice(),
             &self.session.k2,
         ))
     }
@@ -474,18 +493,21 @@ impl IPMIClient<SessionActived> {
     pub async fn send_packet_retry(
         &mut self,
         request_packet: &mut Packet,
-        mut retry_n: u8,
     ) -> Result<Vec<u8>> {
-        while retry_n != 0 {
-            retry_n -= 1;
+        let mut n = self.retry as i32;
+        while n >= 0 {
             let res = self.send_packet(request_packet).await;
-            if res.is_ok() || retry_n == 0 {
+            if res.is_ok() {
+                return res;
+            }
+            if n == 0 {
+                self.re_connect().await?;
                 return res;
             }
             warn!("retry packet : {:?}", request_packet.payload.command());
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            tokio::time::sleep(self.retry_duration).await;
+            n -= 1;
         }
-        self.re_connect().await?;
         Err(EClient::NoResponse)?
     }
 
@@ -509,7 +531,10 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n].to_vec())
     }
 
-    pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
+    pub async fn send_raw_request(
+        &mut self,
+        data: &[u8],
+    ) -> Result<RespPayload> {
         let send_data = if data.len() > 2 {
             data[2..].to_vec()
         } else {
@@ -518,7 +543,7 @@ impl IPMIClient<SessionActived> {
 
         let mut raw_request: Packet =
             IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
-        let response = self.send_packet_retry(&mut raw_request, 3).await?;
+        let response = self.send_packet_retry(&mut raw_request).await?;
         let packet: Packet = (response.as_slice(), &self.session.k2).try_into().unwrap();
         let Payload::IpmiResp(payload) = packet.payload else {
             info!("send raw request");
@@ -527,14 +552,14 @@ impl IPMIClient<SessionActived> {
         Ok(payload)
     }
 
-    pub async fn deactivated(&mut self) -> Result<()> {
+    pub async fn deactivated(&mut self) {
         let cmd = CloseSessionCMD::new(self.session.managed_id);
-        self.send_ipmi_cmd(&cmd).await?;
-        Ok(())
+        let _ = self.send_packet(&mut cmd.gen_packet()).await;
     }
 
     // bug: inspur and dell bmc sometimes response with irelevent request commandcode, when this situation happened, we need reconnect
     pub async fn re_connect(&mut self) -> Result<()> {
+        self.deactivated().await;
         let addr = self.client_socket.peer_addr().unwrap();
         warn!("reconnect: {}", addr);
         *self = IPMIClient::new(addr)
