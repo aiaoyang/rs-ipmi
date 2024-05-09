@@ -95,8 +95,6 @@ pub struct IPMIClient<S: Clone> {
     retry_duration: Duration,
 }
 
-
-
 impl IPMIClient<SessionInactived> {
     /// Creates client for running IPMI commands against a BMC.
     ///
@@ -187,7 +185,7 @@ impl IPMIClient<SessionInactived> {
     ///
     /// ```
     pub async fn activate(mut self) -> Result<IPMIClient<SessionActived>> {
-        self.session.password_mac_key = Some(self.password.to_string().into());
+        self.session.password_mac_key = Some(self.password.as_bytes().to_vec());
 
         self.get_channel_auth_cap().await?; // Get channel auth capabilites and set cipher
         self.rmcpplus_session_authenticate().await // rmcp open session and authenticate
