@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use log::{error, info, warn};
 use tokio::net::{ToSocketAddrs, UdpSocket};
@@ -22,12 +22,14 @@ use crate::{
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+#[derive(Clone)]
 pub enum State {
     Discovery,
     // Authentication,
     Established,
 }
 
+#[derive(Clone)]
 pub struct SessionInactived {
     state: State,
     seq_number: u32,
@@ -61,6 +63,7 @@ impl Default for SessionInactived {
     }
 }
 
+#[derive(Clone)]
 pub struct SessionActived {
     seq_number: u32,
     managed_id: u32,
@@ -80,9 +83,9 @@ impl From<SessionInactived> for SessionActived {
 }
 
 /// default retry_duration is 300ms
-#[derive(Debug)]
-pub struct IPMIClient<S> {
-    client_socket: Box<UdpSocket>,
+#[derive(Debug, Clone)]
+pub struct IPMIClient<S: Clone> {
+    client_socket: Arc<UdpSocket>,
     session: S,
     privilege: Privilege,
     username: Box<str>,
@@ -91,6 +94,8 @@ pub struct IPMIClient<S> {
     retry: u8,
     retry_duration: Duration,
 }
+
+
 
 impl IPMIClient<SessionInactived> {
     /// Creates client for running IPMI commands against a BMC.
@@ -109,6 +114,8 @@ impl IPMIClient<SessionInactived> {
     /// ```
     pub async fn new<A: ToSocketAddrs>(
         ipmi_server_addr: A,
+        username: &str,
+        password: &str,
     ) -> Result<IPMIClient<SessionInactived>> {
         let client_socket = UdpSocket::bind("0.0.0.0:0")
             .await
@@ -118,10 +125,10 @@ impl IPMIClient<SessionInactived> {
             .await
             .map_err(EClient::ConnectToIPMIServer)?;
         Ok(IPMIClient {
-            client_socket: Box::from(client_socket),
+            client_socket: Arc::new(client_socket),
             session: SessionInactived::default(),
-            username: Box::from(""),
-            password: Box::from(""),
+            username: Box::from(username),
+            password: Box::from(password),
             cipher_list_index: 0,
             privilege: Privilege::Callback,
             retry: 0,
@@ -179,14 +186,8 @@ impl IPMIClient<SessionInactived> {
     ///     .map_err(|e: IPMIClientError| println!("Failed to establish session with BMC: {}", e));
     ///
     /// ```
-    pub async fn activate(
-        mut self,
-        username: &str,
-        password: &str,
-    ) -> Result<IPMIClient<SessionActived>> {
-        self.username = Box::from(username);
-        self.password = Box::from(password);
-        self.session.password_mac_key = Some(password.into());
+    pub async fn activate(mut self) -> Result<IPMIClient<SessionActived>> {
+        self.session.password_mac_key = Some(self.password.to_string().into());
 
         self.get_channel_auth_cap().await?; // Get channel auth capabilites and set cipher
         self.rmcpplus_session_authenticate().await // rmcp open session and authenticate
@@ -366,10 +367,13 @@ impl IPMIClient<SessionInactived> {
         let mut n: i32 = self.retry as i32;
         while n >= 0 {
             let res = self.send_unauth_packet(request_packet.clone()).await;
-            if res.is_ok() || n == 0 {
+            if res.is_ok() || n <= 0 {
                 return res;
             }
-            warn!("retry packet: {:?}", request_packet.ipmi_header.payload_type());
+            warn!(
+                "retry packet: {:?}",
+                request_packet.ipmi_header.payload_type()
+            );
             tokio::time::sleep(self.retry_duration).await;
             n -= 1;
         }
@@ -454,10 +458,7 @@ impl IPMIClient<SessionActived> {
         packet_vec
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(
-        &mut self,
-        ipmi_cmd: &CMD,
-    ) -> Result<CMD::Output> {
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
         let mut packet = ipmi_cmd.gen_packet();
         let resp = self.send_and_decrypt_packet(&mut packet).await?;
         let (data, code) = resp.payload.data_and_completion();
@@ -480,35 +481,25 @@ impl IPMIClient<SessionActived> {
         ipmi_cmd.parse(data)
     }
 
-    async fn send_and_decrypt_packet(
-        &mut self,
-        packet: &mut Packet,
-    ) -> Result<Packet> {
+    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
         Packet::try_from((
             self.send_packet_retry(packet).await?.as_slice(),
             &self.session.k2,
         ))
     }
 
-    pub async fn send_packet_retry(
-        &mut self,
-        request_packet: &mut Packet,
-    ) -> Result<Vec<u8>> {
-        let mut n = self.retry as i32;
+    pub async fn send_packet_retry(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
+        let mut n: i32 = self.retry as i32;
         while n >= 0 {
             let res = self.send_packet(request_packet).await;
-            if res.is_ok() {
-                return res;
-            }
-            if n == 0 {
-                self.re_connect().await?;
+            if res.is_ok() || n <= 0 {
                 return res;
             }
             warn!("retry packet : {:?}", request_packet.payload.command());
             tokio::time::sleep(self.retry_duration).await;
             n -= 1;
         }
-        Err(EClient::NoResponse)?
+        unreachable!()
     }
 
     pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
@@ -531,10 +522,7 @@ impl IPMIClient<SessionActived> {
         Ok(buf[..n].to_vec())
     }
 
-    pub async fn send_raw_request(
-        &mut self,
-        data: &[u8],
-    ) -> Result<RespPayload> {
+    pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
         let send_data = if data.len() > 2 {
             data[2..].to_vec()
         } else {
@@ -562,9 +550,9 @@ impl IPMIClient<SessionActived> {
         self.deactivated().await;
         let addr = self.client_socket.peer_addr().unwrap();
         warn!("reconnect: {}", addr);
-        *self = IPMIClient::new(addr)
+        *self = IPMIClient::new(addr, &self.username, &self.password)
             .await?
-            .activate(&self.username, &self.password)
+            .activate()
             .await?;
         Ok(())
     }

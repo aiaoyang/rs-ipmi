@@ -44,9 +44,11 @@ async fn main() -> Result<(), std::io::Error> {
             "admin".into(),
         ];
     }
-    let client_inactived = IPMIClient::new(format!("{}:623", ev[1])).await.unwrap();
+    let client_inactived = IPMIClient::new(format!("{}:623", ev[1]), &ev[2], &ev[2])
+        .await
+        .unwrap();
     let mut c = client_inactived
-        .activate(&ev[2], &ev[3])
+        .activate()
         .await
         .map_err(|e| println!("{e:?}"))
         .unwrap();
