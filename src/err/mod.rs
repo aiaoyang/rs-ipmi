@@ -26,7 +26,10 @@ pub enum Error {
     Io(std::io::Error),
 
     #[error("timeout")]
-    Timeout(tokio::time::error::Elapsed)
+    Timeout(tokio::time::error::Elapsed),
+
+    #[error("other: {0}")]
+    RawString(String)
 }
 
 #[derive(ThisError, Debug)]

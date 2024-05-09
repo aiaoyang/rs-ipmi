@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use log::{error, info, warn};
+use log::{info, warn};
 use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
@@ -93,6 +93,7 @@ pub struct IPMIClient<S: Clone> {
     cipher_list_index: u8,
     retry: u8,
     retry_duration: Duration,
+    auto_reconnect: bool,
 }
 
 impl IPMIClient<SessionInactived> {
@@ -131,6 +132,7 @@ impl IPMIClient<SessionInactived> {
             privilege: Privilege::Callback,
             retry: 0,
             retry_duration: Duration::from_millis(300),
+            auto_reconnect: false,
         })
     }
 
@@ -141,6 +143,11 @@ impl IPMIClient<SessionInactived> {
 
     pub fn retry_duration(mut self, duration: Duration) -> Self {
         self.retry_duration = duration;
+        self
+    }
+
+    pub fn auto_reconnect(mut self) -> Self {
+        self.auto_reconnect = true;
         self
     }
     /// Set the read timeout on the ipmi client UDP socket. Default timeout for the socket is set to 20 seconds
@@ -435,6 +442,7 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
             cipher_list_index: inactive.cipher_list_index,
             retry: inactive.retry,
             retry_duration: inactive.retry_duration,
+            auto_reconnect: inactive.auto_reconnect,
         }
     }
 }
@@ -458,17 +466,31 @@ impl IPMIClient<SessionActived> {
 
     pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
         let mut packet = ipmi_cmd.gen_packet();
-        let resp = self.send_and_decrypt_packet(&mut packet).await?;
+
+        let resp = match self.send_and_decrypt_packet(&mut packet).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                if self.auto_reconnect {
+                    self.re_connect().await?;
+                }
+                return Err(e);
+            }
+        };
         let (data, code) = resp.payload.data_and_completion();
         if let Some(resp_cmd) = resp.payload.command() {
             if ipmi_cmd.command() != resp_cmd {
-                error!(
-                    "req packet command: {:?}, seq: {}, resp command: {:?}, seq: {}",
+                let addr = self.client_socket.peer_addr();
+                let err = format!(
+                    "peer: {addr:?}, req packet command: {:?}, seq: {}, resp command: {:?}, seq: {}",
                     packet.payload.command(),
                     packet.ipmi_header.seq_num(),
                     resp.payload.command(),
                     resp.ipmi_header.seq_num(),
-                )
+                );
+                if self.auto_reconnect {
+                    self.re_connect().await?;
+                }
+                return Err(Error::RawString(err));
             }
         }
 
