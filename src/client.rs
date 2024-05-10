@@ -91,6 +91,7 @@ pub struct IPMIClient<S: Clone> {
     username: Box<str>,
     password: Box<str>,
     cipher_list_index: u8,
+    socket_recv_timeout: Duration,
     retry: u8,
     retry_duration: Duration,
     auto_reconnect: bool,
@@ -100,16 +101,23 @@ impl IPMIClient<SessionInactived> {
     /// Creates client for running IPMI commands against a BMC.
     ///
     /// # Arguments
-    /// * `ipmi_server_addr` - Socket address of the IPMI server (or BMC LAN controller). Default port for IPMI RMCP is 623 UDP.
+    /// * `ipmi_server_addr` - Socket address of the IPMI server (or BMC LAN controller).
+    /// Default port for IPMI RMCP is 623 UDP.
     ///
     /// # Examples
     ///
     /// ```
-    /// use rust_ipmi::ipmi_client::{IPMIClient, IPMIClientError};
-    ///
-    /// let ipmi_server = "192.168.1.10:623"
-    /// let ipmi_client: Result<IPMIClient, IPMIClientError> = IPMIClient::new(ipmi_server)
-    ///     .expect("Failed to connect to the IPMI server");
+    /// # tokio_test::block_on(async {
+    ///     use rust_ipmi::{IPMIClient, Error, SessionInactived};
+    ///     let ipmi_server = "192.168.1.10:623";
+    ///     let username = "username";
+    ///     let password = "password";
+    ///     let ipmi_client: Result<IPMIClient<SessionInactived>, Error> = IPMIClient::new(
+    ///          ipmi_server,
+    ///          username,
+    ///          password)
+    ///         .await;
+    /// # })
     /// ```
     pub async fn new<A: ToSocketAddrs>(
         ipmi_server_addr: A,
@@ -130,10 +138,16 @@ impl IPMIClient<SessionInactived> {
             password: Box::from(password),
             cipher_list_index: 0,
             privilege: Privilege::Callback,
+            socket_recv_timeout: Duration::from_secs(5),
             retry: 0,
             retry_duration: Duration::from_millis(300),
             auto_reconnect: false,
         })
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.socket_recv_timeout = timeout;
+        self
     }
 
     pub fn retry(mut self, n: u8) -> Self {
@@ -146,8 +160,8 @@ impl IPMIClient<SessionInactived> {
         self
     }
 
-    pub fn auto_reconnect(mut self) -> Self {
-        self.auto_reconnect = true;
+    pub fn auto_reconnect(mut self, b: bool) -> Self {
+        self.auto_reconnect = b;
         self
     }
     /// Set the read timeout on the ipmi client UDP socket. Default timeout for the socket is set to 20 seconds
@@ -188,7 +202,9 @@ impl IPMIClient<SessionInactived> {
     ///
     /// let username = "my-username";
     /// ipmi_client.establish_connection(username, "password")
-    ///     .map_err(|e: IPMIClientError| println!("Failed to establish session with BMC: {}", e));
+    ///     .map_err(|e: IPMIClientError| {
+    ///         println!("Failed to establish session with BMC: {}", e);
+    ///     });
     ///
     /// ```
     pub async fn activate(mut self) -> Result<IPMIClient<SessionActived>> {
@@ -440,6 +456,7 @@ impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
             username: inactive.username,
             password: inactive.password,
             cipher_list_index: inactive.cipher_list_index,
+            socket_recv_timeout: inactive.socket_recv_timeout,
             retry: inactive.retry,
             retry_duration: inactive.retry_duration,
             auto_reconnect: inactive.auto_reconnect,
@@ -510,12 +527,14 @@ impl IPMIClient<SessionActived> {
 
     pub async fn send_packet_retry(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
         let mut n: i32 = self.retry as i32;
+        let mut retry_counter = 0;
         while n >= 0 {
             let res = self.send_packet(request_packet).await;
             if res.is_ok() || n <= 0 {
                 return res;
             }
-            warn!("retry packet : {:?}", request_packet.payload.command());
+            retry_counter += 1;
+            warn!("retry packet[{retry_counter}]time : {:?}", request_packet.payload.command());
             tokio::time::sleep(self.retry_duration).await;
             n -= 1;
         }
@@ -535,7 +554,7 @@ impl IPMIClient<SessionActived> {
 
         let mut buf = Vec::with_capacity(1024);
         let n = tokio::time::timeout(
-            Duration::from_secs(3),
+            self.socket_recv_timeout,
             self.client_socket.recv_buf(&mut buf),
         )
         .await??;
@@ -565,7 +584,8 @@ impl IPMIClient<SessionActived> {
         let _ = self.send_packet(&mut cmd.gen_packet()).await;
     }
 
-    // bug: inspur and dell bmc sometimes response with irelevent request commandcode, when this situation happened, we need reconnect
+    // bug: inspur and dell bmc sometimes response with irelevent request commandcode,
+    // when this situation happened, we need reconnect
     pub async fn re_connect(&mut self) -> Result<()> {
         self.deactivated().await;
         let addr = self.client_socket.peer_addr().unwrap();
