@@ -32,6 +32,21 @@ pub enum Error {
     RawString(String)
 }
 
+impl From<Error> for f64 {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::Client(_) => 100_f64,
+            Error::Packet(_) => 200_f64,
+            Error::Crypto(_) => 300_f64,
+            Error::TryFromSlice(_) => 400_f64,
+            Error::TryFromU8(_) => 500_f64,
+            Error::Io(_) => 600_f64,
+            Error::Timeout(_) => 700_f64,
+            Error::RawString(_) => 800_f64,
+        }
+    }
+}
+
 #[derive(ThisError, Debug)]
 pub enum ECrypto {
     #[error("Unpad: {0}")]
