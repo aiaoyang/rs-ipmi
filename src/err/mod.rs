@@ -8,6 +8,8 @@ mod packet;
 
 use thiserror::Error as ThisError;
 
+use crate::CompletionCode;
+
 #[derive(ThisError, Debug)]
 pub enum Error {
     #[error("Client: {0}")]
@@ -21,7 +23,7 @@ pub enum Error {
 
     #[error("Try from u8: {0}")]
     TryFromU8(u8),
-    
+
     #[error("io: {0}")]
     Io(std::io::Error),
 
@@ -29,7 +31,7 @@ pub enum Error {
     Timeout(tokio::time::error::Elapsed),
 
     #[error("other: {0}")]
-    RawString(String)
+    RawString(String),
 }
 
 impl From<Error> for f64 {
@@ -80,5 +82,14 @@ impl From<io::Error> for Error {
 impl From<tokio::time::error::Elapsed> for Error {
     fn from(value: tokio::time::error::Elapsed) -> Self {
         Self::Timeout(value)
+    }
+}
+
+impl Error {
+    pub fn is_rq_sensor_data_record_not_present(&self) -> bool {
+        matches!(self, Error::Client(EClient::CompletionCode((
+                _,
+                CompletionCode::RqSensorDataRecordNotPresent,
+            ))))
     }
 }
