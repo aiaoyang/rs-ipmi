@@ -1,9 +1,11 @@
 pub use app::channel::*;
 pub use app::cipher::*;
+pub use chassis::*;
 pub use sdr::*;
 pub use sel::*;
 
 mod app;
+mod chassis;
 mod sdr;
 mod sel;
 

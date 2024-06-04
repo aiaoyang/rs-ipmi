@@ -77,6 +77,25 @@ impl Entry {
             _ => ("unreacheable", false, "".into()),
         }
     }
+    pub fn description(&self) -> Option<(u32, String)> {
+        let Self::System {
+            sensor_type,
+            event_type,
+            event_data,
+            timestamp,
+            ..
+        } = &self
+        else {
+            None?
+        };
+        Some((
+            *timestamp,
+            event_type
+                .description(sensor_type, event_data)
+                .0
+                .to_string(),
+        ))
+    }
     pub fn id(&self) -> u16 {
         if let Entry::System { record_id, .. } = self {
             record_id.0
