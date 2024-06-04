@@ -534,7 +534,10 @@ impl IPMIClient<SessionActived> {
                 return res;
             }
             retry_counter += 1;
-            warn!("retry packet[{retry_counter}]time : {:?}", request_packet.payload.command());
+            warn!(
+                "retry packet[{retry_counter}]time : {:?}",
+                request_packet.payload.command()
+            );
             tokio::time::sleep(self.retry_duration).await;
             n -= 1;
         }
