@@ -45,10 +45,10 @@ impl IpmiCommand for GetChassisStatus {
         crate::NetFn::Chassis
     }
     fn parse(&self, data: &[u8]) -> Result<Self::Output, crate::Error> {
-        if data.len() < 4 {
+        if data.len() < 3 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
                 self.command(),
-                4,
+                3,
                 data.len(),
                 data.into(),
             )))?
