@@ -1,4 +1,6 @@
+pub mod boot_opt;
 pub mod control;
+
 use crate::{request::ReqPayload, ECommand, ECommandCode, IpmiCommand, Payload};
 
 pub struct GetChassisStatus;
@@ -11,6 +13,7 @@ pub struct GetChassisStatusResp {
     state: u8,
     front_control_panel: u8,
 }
+
 const SYSTEM_POWER: u8 = 0x01;
 
 #[derive(Debug)]
@@ -24,6 +27,14 @@ impl From<u8> for PowerState {
             Self::On
         } else {
             Self::Off
+        }
+    }
+}
+impl From<PowerState> for &'static str {
+    fn from(value: PowerState) -> Self {
+        match value {
+            PowerState::On => "Power is on",
+            PowerState::Off => "Power is off",
         }
     }
 }
