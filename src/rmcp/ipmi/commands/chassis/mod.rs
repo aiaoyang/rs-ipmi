@@ -48,7 +48,7 @@ impl IpmiCommand for GetChassisStatus {
         if data.len() < 4 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
                 self.command(),
-                14,
+                4,
                 data.len(),
                 data.into(),
             )))?
@@ -62,7 +62,7 @@ impl IpmiCommand for GetChassisStatus {
         })
     }
     fn command(&self) -> super::CommandCode {
-        super::CommandCode::Raw(0x01)
+        super::CommandCode::Chassis
     }
     fn payload(&self) -> crate::Payload {
         Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))

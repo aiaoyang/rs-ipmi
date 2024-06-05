@@ -18,6 +18,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandCode {
     Raw(u8),
+    Chassis,
     GetChannelAuthCapabilities,
     SetSessionPrivilegeLevel,
     CloseSession,
@@ -31,6 +32,7 @@ impl From<u8> for CommandCode {
             0x54 => CommandCode::GetChannelCipherSuites,
             0x3b => CommandCode::SetSessionPrivilegeLevel,
             0x3c => CommandCode::CloseSession,
+            0x01 => CommandCode::Chassis,
             x => CommandCode::Raw(x),
         }
     }
@@ -39,6 +41,7 @@ impl From<u8> for CommandCode {
 impl From<CommandCode> for u8 {
     fn from(val: CommandCode) -> Self {
         match val {
+            CommandCode::Chassis => 0x01,
             CommandCode::GetChannelAuthCapabilities => 0x38,
             CommandCode::GetChannelCipherSuites => 0x54,
             CommandCode::SetSessionPrivilegeLevel => 0x3b,
@@ -62,7 +65,7 @@ impl IpmiCommand for CloseSessionCMD {
     }
 
     fn command(&self) -> CommandCode {
-        0x3c.into()
+        CommandCode::CloseSession
     }
 
     fn payload(&self) -> Payload {
