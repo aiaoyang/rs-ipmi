@@ -1,3 +1,4 @@
+pub mod control;
 use crate::{request::ReqPayload, ECommand, ECommandCode, IpmiCommand, Payload};
 
 pub struct GetChassisStatus;
