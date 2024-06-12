@@ -9,7 +9,7 @@ pub enum EClient {
     #[error("Failed to bind due to: {0}")]
     FailedBind(#[source] io::Error),
     #[error("Failed to connect to IPMI Server due to: {0}")]
-    ConnectToIPMIServer(#[source] io::Error),
+    ConnectToIPMIServer(String),
     #[error("Failed to set the socket read timeout: {0}")]
     SetReadTimeOutError(#[source] io::Error),
     #[error("Failed to send packet due to: {0}")]

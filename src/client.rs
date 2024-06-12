@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use log::{info, warn};
 use tokio::net::{ToSocketAddrs, UdpSocket};
@@ -119,7 +119,7 @@ impl IPMIClient<SessionInactived> {
     ///         .await;
     /// # })
     /// ```
-    pub async fn new<A: ToSocketAddrs>(
+    pub async fn new<A: ToSocketAddrs + Debug>(
         ipmi_server_addr: A,
         username: &str,
         password: &str,
@@ -128,9 +128,11 @@ impl IPMIClient<SessionInactived> {
             .await
             .map_err(EClient::FailedBind)?;
         client_socket
-            .connect(ipmi_server_addr)
+            .connect(&ipmi_server_addr)
             .await
-            .map_err(EClient::ConnectToIPMIServer)?;
+            .map_err(|e| {
+                EClient::ConnectToIPMIServer(format!("{}: {:?}", e.to_string(), &ipmi_server_addr))
+            })?;
         Ok(IPMIClient {
             client_socket: Arc::new(client_socket),
             session: SessionInactived::default(),
