@@ -9,6 +9,8 @@ use super::{
 pub enum IdStringModifier {
     Numeric,
     Alpha,
+    // unknown in ipmi spec v2 Table 43-
+    Unknown(u8),
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +58,7 @@ impl CompactSensorRecord {
         let id_string_instance_modifier = match (direction_sharing_1 & 0x30) >> 4 {
             0b00 => IdStringModifier::Numeric,
             0b01 => IdStringModifier::Alpha,
-            _ => panic!("Invalid ID string modifier, no fallback available."),
+            val => IdStringModifier::Unknown(val),
         };
 
         let share_count = direction_sharing_1 & 0xF;

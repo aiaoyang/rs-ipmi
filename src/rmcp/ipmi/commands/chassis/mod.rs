@@ -5,6 +5,7 @@ use crate::{request::ReqPayload, ECommand, ECommandCode, IpmiCommand, Payload};
 
 pub struct GetChassisStatus;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct GetChassisStatusResp {
     pub p_state: PowerState,
