@@ -1,7 +1,12 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, io::Read, sync::Arc, time::Duration};
 
+use chrono::Duration;
 use log::{info, warn};
-use tokio::net::{ToSocketAddrs, UdpSocket};
+use tokio::{
+    io::AsyncReadExt,
+    net::{ToSocketAddrs, UdpSocket},
+    time::timeout,
+};
 
 use crate::{
     commands::{CloseSessionCMD, CommandCode, GetChannelAuthCapabilitiesRequest, Privilege},
@@ -130,9 +135,7 @@ impl IPMIClient<SessionInactived> {
         client_socket
             .connect(&ipmi_server_addr)
             .await
-            .map_err(|e| {
-                EClient::ConnectToIPMIServer(format!("{}: {:?}", e.to_string(), &ipmi_server_addr))
-            })?;
+            .map_err(|e| EClient::ConnectToIPMIServer(format!("{}: {:?}", e, &ipmi_server_addr)))?;
         Ok(IPMIClient {
             client_socket: Arc::new(client_socket),
             session: SessionInactived::default(),
@@ -500,7 +503,7 @@ impl IPMIClient<SessionActived> {
             if ipmi_cmd.command() != resp_cmd {
                 let addr = self.client_socket.peer_addr();
                 let err = format!(
-                    "peer: {addr:?}, req packet command: {:?}, seq: {}, resp command: {:?}, seq: {}",
+                    "peer: {addr:?}, req packet command: {:?}, seq: {}, resp command: {:x?}, seq: {}",
                     packet.payload.command(),
                     packet.ipmi_header.seq_num(),
                     resp.payload.command(),
@@ -546,6 +549,30 @@ impl IPMIClient<SessionActived> {
         unreachable!()
     }
 
+    pub async fn loop_sol_data(&mut self) -> Result<()> {
+        let mut stdin = tokio::io::stdin();
+        let send_buf = &mut [0u8; 64];
+        let mut recv_buf = Vec::with_capacity(1024);
+        loop {
+            if let Ok(Ok(i)) = timeout(Duration::from_secs(1), stdin.read(send_buf)).await {
+                println!("stdin -> {}", String::from_utf8_lossy(&send_buf[..i]));
+            } else {
+                println!("fuck debug timeout 1");
+            }
+            if let Ok(Ok(recv)) = timeout(
+                self.socket_recv_timeout,
+                self.client_socket.recv_buf(&mut recv_buf),
+            )
+            .await
+            {
+                println!("recv: {}", String::from_utf8_lossy(&recv_buf[0..recv]));
+            } else {
+                println!("fuck debug timeout 2");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
     pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
         request_packet.set_session_id(self.session.managed_id);
         request_packet.set_session_seq_num(self.session.seq_number);
@@ -558,7 +585,7 @@ impl IPMIClient<SessionActived> {
             .map_err(EClient::FailedSend)?;
 
         let mut buf = Vec::with_capacity(1024);
-        let n = tokio::time::timeout(
+        let n = timeout(
             self.socket_recv_timeout,
             self.client_socket.recv_buf(&mut buf),
         )
@@ -589,7 +616,7 @@ impl IPMIClient<SessionActived> {
         let _ = self.send_packet(&mut cmd.gen_packet()).await;
     }
 
-    // bug: inspur and dell bmc sometimes response with irelevent request commandcode,
+    // bug: inspur and dell bmc sometimes response with different request commandcode,
     // when this situation happened, we need reconnect
     pub async fn re_connect(&mut self) -> Result<()> {
         self.deactivated().await;

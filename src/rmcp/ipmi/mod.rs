@@ -199,6 +199,8 @@ pub enum NetFn {
     Storage,
     Transport,
     Reserved,
+    ISol,
+    TSol,
     Unknown(u8),
 }
 impl From<u8> for NetFn {
@@ -212,6 +214,8 @@ impl From<u8> for NetFn {
             0x0A..=0x0B => NetFn::Storage,
             0x0C..=0x0D => NetFn::Transport,
             0x0E..=0x2B => NetFn::Reserved,
+            0x34 => NetFn::ISol,
+            0x30 => NetFn::TSol,
             _ => NetFn::Unknown(value),
         }
     }
@@ -227,6 +231,8 @@ impl From<NetFn> for u8 {
             NetFn::Firmware => 0x08,
             NetFn::Storage => 0x0A,
             NetFn::Transport => 0x0C,
+            NetFn::ISol => 0x34,
+            NetFn::TSol => 0x30,
             NetFn::Reserved => 0x0E,
             NetFn::Unknown(fn_code) => fn_code,
         }

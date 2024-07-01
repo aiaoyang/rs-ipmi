@@ -1,14 +1,249 @@
-# rust-ipmi
+# ipmi-lib
 ## this project inspired by
-1. rust-ipmi(main by this)
-2. ipmi-rs
-3. ipmigo
-### ⚠️ Security WARNING ⚠️
+1. [rust-ipmi] (https://github.com/htemuri/rust-ipmi)
+2. [ipmi-rs] (https://github.com/datdenkikniet/ipmi-rs)
+3. [ipmigo] (https://github.com/k-sone/ipmigo)
 
+## What is ipmi-lib
+Ipmi-lib is a async ipmi library write in rust
+
+### supported version
+- IPMI v2.0/Rmpc+
+
+
+### ⚠️ Security WARNING ⚠️
 IPMI through LAN has multiple relatively well-documented security vulnerabilities. Here are a few suggestions to harden your security:
 - Change the default IPMI username
 - Keep port 623/UDP to the servers under a restrictive firewall
 - Do not directly expose your servers to the WAN
+
+## Support Commands
+
+### IPMI Device Global Commands
+
+| Method                             | Status  | corresponding ipmitool usage  |
+| ---------------------------------- | ------- | ----------------------------- |
+| GetDeviceID                        |         | mc info                       |
+| ColdReset                          |         | mc reset cold                 |
+| WarmReset                          |         | mc reset warm                 |
+| GetSelfTestResults                 |         | mc selftest, chassis selftest |
+| ManufacturingTestOn                |         |
+| SetACPIPowerState                  |         |
+| GetACPIPowerState                  |         |
+| GetDeviceGUID                      |         |
+| GetNetFnSupport                    |         |
+| GetCommandSupport                  |         |
+| GetCommandSubfunctionSupport       |         |
+| GetConfigurableCommands            |         |
+| GetConfigurableCommandSubfunctions |         |
+| SetCommandEnables                  |         |
+| GetCommandEnables                  |         |
+| GetCommandSubfunctionsEnables      |         |
+| GetSubfunctionsEnables             |         |
+| GetOEMNetFnIanaSupport             |         |
+
+
+### Event Commands
+
+| Method               | Status  | corresponding ipmitool usage |
+| -------------------- | ------- | ---------------------------- |
+| SetEventReceiver     |         |
+| GetEventReceiver     |         |
+| PlatformEventMessage |         |
+
+
+### Sensor Device Commands
+
+| Method                         | Status  | corresponding ipmitool usage |
+| ------------------------------ | ------- | ---------------------------- |
+| GetDeviceSDRInfo               | &check; |
+| GetDeviceSDR                   | &check; |
+| ReserveDeviceSDRRepo           |         |
+| GetSensorReadingFactors        |         |
+| SetSensorHysteresis            |         |
+| GetSensorHysteresis            |         |
+| SetSensorThresholds            |         |
+| GetSensorThresholds            |         |
+| SetSensorEventEnable           |         |
+| GetSensorEventEnable           |         |
+| RearmSensorEvents              |         |
+| GetSensorEventStatus           |         |
+| GetSensorReading               | &check; |
+| SetSensorType                  |         |
+| GetSensorType                  |         |
+| SetSensorReadingAndEventStatus |         |
+| GetSensors (*)                 | &check; | sensor list                  |
+| GetSensorByID (*)              |         |                              |
+| GetSensorByName (*)            |         | sensor get                   |
+
+
+### FRU Device Commands
+
+| Method                  | Status  | corresponding ipmitool usage |
+| ----------------------- | ------- | ---------------------------- |
+| GetFRUInventoryAreaInfo |         |
+| ReadFRUData             |         |
+| WriteFRUData            |         |
+| GetFRU (*)              |         | fru print                    |
+| GetFRUs (*)             |         | fru print                    |
+
+
+### SEL Device Commands
+
+| Method              | Status  | corresponding ipmitool usage |
+| ------------------- | ------- | ---------------------------- |
+| GetSELInfo          | &check; | sel info                     |
+| GetSELAllocInfo     | &check; | sel info                     |
+| ReserveSEL          |         |
+| GetSELEntry         |         |
+| AddSELEntry         |         |
+| PartialAddSELEntry  |         |
+| DeleteSELEntry      |         |
+| ClearSEL            |         | sel clear                    |
+| GetSELTime          |         |
+| SetSELTime          |         |
+| GetAuxLogStatus     |         |
+| SetAuxLogStatus     |         |
+| GetSELTimeUTCOffset |         |
+| SetSELTimeUTCOffset |         |
+
+
+### SDR Device Commands
+
+| Method                 | Status  | corresponding ipmitool usage |
+| ---------------------- | ------- | ---------------------------- |
+| GetSDRRepoInfo         | &check; | sdr info                     |
+| GetSDRRepoAllocInfo    | &check; | sdr info                     |
+| ReserveSDRRepo         | &check; |
+| GetSDR                 | &check; |                              |
+| GetSDRs (*)            | &check; |                              |
+| GetSDRBySensorID (*)   |         |                              |
+| GetSDRBySensorName (*) |         |
+| AddSDR                 |         |
+| PartialAddSDR          |         |
+| DeleteSDR              |         |
+| ClearSDRRepo           |         |
+| GetSDRRepoTime         |         |
+| SetSDRRepoTime         |         |
+| EnterSDRRepoUpdateMode |         |
+| ExitSDRRepoUpdateMode  |         |
+| RunInitializationAgent |         |
+
+
+### LAN Device Commands
+
+| Method             | Status  | corresponding ipmitool usage |
+| ------------------ | ------- | ---------------------------- |
+| SetLanConfigParams |         |
+| GetLanConfigParams |         |
+| GetLanConfig (*)   |         | lan print                    |
+| SuspendARPs        |         |
+| GetIpStatistics    |         |
+
+
+### Serial/Modem Device Commands
+
+| Method                 | Status  | corresponding ipmitool usage |
+| ---------------------- | ------- | ---------------------------- |
+| SetSerialConfig        |         |
+| GetSerialConfig        |         |
+| SetSerialMux           |         |
+| GetTapResponseCodes    |         |
+| SetPPPTransmitData     |         |
+| GetPPPTransmitData     |         |
+| SendPPPPacket          |         |
+| GetPPPReceiveData      |         |
+| SerialConnectionActive |         |
+| Callback               |         |
+| SetUserCallbackOptions |         |
+| GetUserCallbackOptions |         |
+| SetSerialRoutingMux    |         |
+| SOLActivating          |         |
+| GetSOLConfigParams     |         |
+| SetSOLConfigParams     |         |
+| SOLInfo                |         | sol info                     |
+
+
+### Chassis Device Commands
+
+| Method                    | Status  | corresponding ipmitool usage                      |
+| ------------------------- | ------- | ------------------------------------------------- |
+| GetChassisCapabilities    |         |
+| GetChassisStatus          | &check; | chassis status, chassis power status              |
+| ChassisControl            | &check; | chassis power on/off/cycle/reset/diag/soft        |
+| ChassisReset              |         |
+| ChassisIdentify           |         | chassis identify                                  |
+| SetChassisCapabilities    |         |
+| SetPowerRestorePolicy     |         | chassis policy list/always-on/previous/always-off |
+| GetSystemRestartCause     |         | chassis restart_cause                             |
+| SetSystemBootOptions      |         | chassis bootparam set                             |
+| SetBootParamBootFlags (*) | &check; | chassis bootdev                                   |
+| GetSystemBootOptions      | &check; | chassis bootparam get                             |
+| SetFrontPanelEnables      |         |
+| SetPowerCycleInterval     |         |
+| GetPOHCounter             |         | chassis poh                                       |
+
+
+### Command Forwarding Commands
+
+| Method          | Status | corresponding ipmitool usage |
+| --------------- | ------ | ---------------------------- |
+| Forwarded        |        |
+| SetForwarded    |        |
+| GetForwarded    |        |
+| EnableForwarded |        |
+
+### Bridge Management Commands (ICMB)
+
+| Method                | Status | corresponding ipmitool usage |
+| --------------------- | ------ | ---------------------------- |
+| GetBridgeState        |        |
+| SetBridgeState        |        |
+| GetICMBAddress        |        |
+| SetICMBAddress        |        |
+| SetBridgeProxyAddress |        |
+| GetBridgeStatistics   |        |
+| GetICMBCapabilities   |        |
+| ClearBridgeStatistics |        |
+| GetBridgeProxyAddress |        |
+| GetICMBConnectorInfo  |        |
+| GetICMBConnectionID   |        |
+| SendICMBConnectionID  |        |
+
+### Discovery Commands (ICMB)
+
+| Method              | Status | corresponding ipmitool usage |
+| ------------------- | ------ | ---------------------------- |
+| PrepareForDiscovery |        |
+| GetAddresses        |        |
+| SetDiscovered       |        |
+| GetChassisDeviceId  |        |
+| SetChassisDeviceId  |        |
+
+### Bridging Commands (ICMB)
+
+| Method        | Status | corresponding ipmitool usage |
+| ------------- | ------ | ---------------------------- |
+| BridgeRequest |        |
+| BridgeMessage |        |
+
+### Event Commands (ICMB)
+
+| Method                 | Status | corresponding ipmitool usage |
+| ---------------------- | ------ | ---------------------------- |
+| GetEventCount          |        |
+| SetEventDestination    |        |
+| SetEventReceptionState |        |
+| SendICMBEventMessage   |        |
+| GetEventDestination    |        |
+| GetEventReceptionState |        |
+
+
+### Other Bridge Commands
+
+| Method      | Status | corresponding ipmitool usage |
+| ----------- | ------ | ---------------------------- |
+| ErrorReport |        |
 
 ### Example
 
@@ -167,21 +402,3 @@ async fn get_sdr<F: Fn(&str) -> bool>(c: &mut IPMIClient<SessionActived>, retain
 
 
 ```
-
-<!-- ## Design documentation for rust-ipmi -->
-<!--
-## Background
-
-rust-ipmi is a native rust client for remotely managing/monitoring systems with hardware support for IPMI. IPMI is a specification which allows software to interact and communicate with systems through the BMC (Baseboard Management Controller). BMC is a hardware component which enables interaction with a computer's chassis, motherboard, and storage through LAN and serial.
--->
-<!-- ![IPMI Block diagram](/images/ipmi.png) -->
-
-<!-- This library is focusing on the IPMI LAN protocol. Some general information on IPMI through LAN:
-1. This is a network-based implementation of IPMI so network packets will be sent to and received from the BMC LAN controller on port 623 through UDP.
-2. The packet structure generally looks like Ethernet frame -> IP/UDP -> RMCP header -> IPMI header -> IPMI payload
-3. Intel came out with a IPMI v2 and RMCP+ which introduced encrypted payloads
--->
-<!-- ## Requirements for this library
-
-- Support IPMI v1.5/2 RMCP/RMCP+
-- Support most common APP and CHASSIS commands -->

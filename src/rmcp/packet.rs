@@ -1,5 +1,8 @@
 use crate::{
-    commands::CommandCode, err::{EPacket, Error}, rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader}, CompletionCode, IpmiV2Header
+    commands::CommandCode,
+    err::{EPacket, Error},
+    rmcp::{plus::crypto::aes_128_cbc_decrypt, IpmiHeader, IpmiV1Header, PayloadType, RmcpHeader},
+    CompletionCode, EIpmiPayload, IpmiV2Header, NetFn, SessionActived,
 };
 
 use super::{
@@ -96,6 +99,7 @@ impl TryFrom<(&[u8], &[u8; 20])> for Packet {
                         PayloadType::RAKP4 => {
                             Payload::Rakp(Rakp::Message4(payload_vec.as_slice().try_into()?))
                         }
+                        PayloadType::Sol => Payload::Sol(payload_vec.as_slice().try_into()?),
                         _ => unreachable!(),
                     },
                 }
@@ -123,6 +127,18 @@ impl Packet {
             rmcp_header,
             ipmi_header,
             payload,
+        }
+    }
+
+    pub fn new_sol_packet(data: &[u8]) -> Packet {
+        Packet {
+            rmcp_header: RmcpHeader::default(),
+            ipmi_header: IpmiHeader::V2_0(IpmiV2Header::new_est(((data.len() as u8) + 7).into())),
+            payload: Payload::IpmiReq(ReqPayload::new(
+                NetFn::App,
+                CommandCode::ActivatePayload,
+                data.to_vec(),
+            )),
         }
     }
 
@@ -158,13 +174,54 @@ impl Default for Packet {
         }
     }
 }
+
 #[derive(Clone, Debug)]
 pub enum Payload {
     IpmiResp(RespPayload),
     IpmiReq(ReqPayload),
     Rmcp(RMCPPlusOpenSession),
     Rakp(Rakp),
+    Sol(SolPacket),
     None,
+}
+
+#[derive(Clone, Debug)]
+pub struct SolPacket {
+    packet_sequence_number: u8,
+    acked_packet_number: u8,
+    accepted_character_count: u8,
+    operation: u8,
+    data: Vec<u8>,
+}
+
+impl TryFrom<&[u8]> for SolPacket {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.len() < 4 {
+            return Err(EIpmiPayload::WrongLength)?;
+        }
+        Ok(Self {
+            packet_sequence_number: value[0],
+            acked_packet_number: value[1],
+            accepted_character_count: value[2],
+            operation: value[3],
+            data: value[3..].to_vec(),
+        })
+    }
+}
+
+impl From<SolPacket> for Vec<u8> {
+    fn from(value: SolPacket) -> Self {
+        let mut v = vec![
+            value.packet_sequence_number,
+            value.acked_packet_number,
+            value.accepted_character_count,
+            value.operation,
+        ];
+        v.extend(value.data);
+        v
+    }
 }
 
 impl Payload {
@@ -197,6 +254,7 @@ impl From<Payload> for Vec<u8> {
             Payload::Rakp(payload) => payload.into(),
             Payload::IpmiResp(_) => unreachable!(),
             Payload::IpmiReq(payload) => payload.into(),
+            Payload::Sol(payload) => payload.into(),
             Payload::None => Vec::new(),
         }
     }

@@ -1,5 +1,6 @@
 pub use app::channel::*;
 pub use app::cipher::*;
+pub use app::sol::*;
 pub use chassis::*;
 pub use sdr::*;
 pub use sel::*;
@@ -23,6 +24,8 @@ pub enum CommandCode {
     SetSessionPrivilegeLevel,
     CloseSession,
     GetChannelCipherSuites,
+    ActivatePayload,
+    DeactivatePayload,
 }
 
 impl From<u8> for CommandCode {
@@ -33,6 +36,8 @@ impl From<u8> for CommandCode {
             0x3b => CommandCode::SetSessionPrivilegeLevel,
             0x3c => CommandCode::CloseSession,
             0x01 => CommandCode::Chassis,
+            0x48 => CommandCode::ActivatePayload,
+            0x49 => CommandCode::DeactivatePayload,
             x => CommandCode::Raw(x),
         }
     }
@@ -46,6 +51,8 @@ impl From<CommandCode> for u8 {
             CommandCode::GetChannelCipherSuites => 0x54,
             CommandCode::SetSessionPrivilegeLevel => 0x3b,
             CommandCode::CloseSession => 0x3c,
+            CommandCode::ActivatePayload => 0x48,
+            CommandCode::DeactivatePayload => 0x49,
             CommandCode::Raw(x) => x,
         }
     }

@@ -88,7 +88,6 @@ impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
             auth_version: u8_ms_bit(value[1], 0).into(),
             auth_type: {
                 let mut result: Vec<AuthType> = vec![];
-                // if auth_bv[2] {
                 if u8_ms_bit(value[1], 2) {
                     result.push(AuthType::Oem)
                 }
