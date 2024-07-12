@@ -1,5 +1,6 @@
 use crate::{
-    commands::CommandCode, request::ReqPayload, ECommand, ECommandCode, Error, IpmiCommand, Payload,
+    commands::CommandCode, request::IpmiRequestPayload, ECommand, ECommandCode, Error, IpmiCommand,
+    NetFn, Packet, PacketPayload,
 };
 
 pub struct GetReserveSDRRepository;
@@ -12,17 +13,8 @@ pub struct ReserveSDRRepository {
 impl IpmiCommand for GetReserveSDRRepository {
     type Output = ReserveSDRRepository;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
-    }
-
-    fn command(&self) -> CommandCode {
-        CommandCode::Raw(0x22)
-    }
-
-    fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
-    }
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x22);
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
@@ -36,5 +28,14 @@ impl IpmiCommand for GetReserveSDRRepository {
         Ok(ReserveSDRRepository {
             reservation_id: u16::from_le_bytes([data[0], data[1]]),
         })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Vec::new(),
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }

@@ -1,8 +1,8 @@
 use crate::commands::CommandCode;
-use crate::request::ReqPayload;
+use crate::request::IpmiRequestPayload;
 use crate::storage::sdr::{Address, Channel, SensorKey};
 use crate::{storage::sdr::SensorNumber, IpmiCommand};
-use crate::{ECommand, Error, Payload};
+use crate::{ECommand, Error, NetFn, Packet, PacketPayload};
 
 pub struct GetRawSensorReading {
     sensor_number: SensorNumber,
@@ -32,21 +32,9 @@ impl GetRawSensorReading {
 impl IpmiCommand for GetRawSensorReading {
     type Output = RawSensorReading;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::SensorEvent
-    }
+    const NET_FN: NetFn = NetFn::SensorEvent;
 
-    fn command(&self) -> crate::commands::CommandCode {
-        CommandCode::Raw(0x2d)
-    }
-
-    fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
-            vec![self.sensor_number.get()],
-        ))
-    }
+    const COMMAND: CommandCode = CommandCode::Raw(0x2d);
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
@@ -78,6 +66,15 @@ impl IpmiCommand for GetRawSensorReading {
             offset_data_1,
             offset_data_2,
         })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            vec![self.sensor_number.get()],
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }
 

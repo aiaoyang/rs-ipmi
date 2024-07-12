@@ -1,74 +1,101 @@
-use std::rc::Rc;
+use crate::{IpmiSession, IpmiV2Session, Packet, RmcpHeader};
+#[derive(Clone, Debug)]
+pub struct IpmiRawRequest<'a>(&'a [u8]);
 
-use crate::{
-    commands::CommandCode,
-    err::{EIpmiPayload, EPacket},
-    rmcp::Payload,
-};
+impl<'a> IpmiRawRequest<'a> {
+    pub fn new(data: &'a [u8]) -> IpmiRawRequest {
+        IpmiRawRequest(data)
+    }
 
-use super::{Address, CompletionCode, IpmiCommand, NetfnLun};
-
-pub struct IpmiRawCommand {
-    pub rs_addr: Address,
-    pub netfn_rslun: NetfnLun,
-    // checksum 1
-    pub rq_addr: Address,
-    pub rqseq_rqlun: NetfnLun,
-    pub command: CommandCode,
-    pub data: Option<Vec<u8>>,
-    // checksum 2
+    pub fn create_packet(&'a self) -> Packet<'a> {
+        Packet::new_raw(
+            RmcpHeader::default(),
+            IpmiSession::V2_0(IpmiV2Session::new_est(32)),
+            self.0,
+        )
+    }
 }
 
-pub struct IpmiRawResponse {
-    pub rq_addr: Address,
-    pub netfn_rqlun: NetfnLun,
-    // checksum 1
-    pub rs_addr: Address,
-    pub rqseq_rslun: NetfnLun,
-    pub command: CommandCode,
-    pub completion_code: CompletionCode,
-    pub data: Rc<[u8]>,
-}
-use crate::err::Error;
+#[cfg(test)]
+mod test {
+    #[cfg(test)]
+    use crate::IPMIClient;
+    use crate::{commands::GetSelInfo, raw::IpmiRawRequest, request::checksum, IpmiCommand};
 
-impl IpmiCommand for IpmiRawCommand {
-    type Output = IpmiRawResponse;
-
-    fn netfn(&self) -> crate::NetFn {
-        todo!()
+    #[tokio::test]
+    async fn gen_raw_command() {
+        // let mut client = IPMIClient::new("172.18.10.25:623".to_string(), "admin", "admin")
+        //     .await
+        //     .unwrap()
+        //     .activate()
+        //     .await
+        //     .unwrap();
+        //
+        // let mut buf = [0_u8; 1024];
+        // let n = GetSelInfo::write_to(&GetSelInfo, &mut buf);
+        //
+        // let mut buf = [0_u8; 1024];
+        // // build_v2_payload(channel, bridge, &mut buf);
+        // build_test(&mut buf);
+        //
+        // let raw_req = IpmiRawRequest::new(&buf[..7]);
+        // assert_eq!(
+        //     &buf[0..n],
+        //     <Vec<u8>>::from(&raw_req.clone().create_packet())
+        // );
+        //
+        // let res = client.send_raw_request().await.unwrap();
+        // println!("resp: {res:#x?}");
+        // let n = client.recv(&mut buf).await.unwrap();
+        // println!("data: {:x?}", &buf[..n]);
+        // let packet = Packet::try_from((&buf[..n], &client.session.k2)).unwrap();
+        // println!("resp: {packet:#x?}");
     }
 
-    fn command(&self) -> CommandCode {
-        todo!()
+    #[cfg(test)]
+    #[allow(unused)]
+    fn build_v2_payload(channel: u8, target_addr: u8, msg: &mut [u8]) {
+        use crate::request::checksum;
+
+        const IPMI_BMC_SLAVE_ADDR: u8 = 0x20;
+        const IPMI_NETFN_APP: u8 = 0x06;
+        const IPMI_REMOTE_SWID: u8 = 0x81;
+        const SEND_MSG_COMMAND: u8 = 0x34;
+
+        msg[0] = IPMI_BMC_SLAVE_ADDR;
+        msg[1] = IPMI_NETFN_APP << 2;
+        msg[2] = checksum(&msg[0..=1]);
+        msg[3] = IPMI_REMOTE_SWID;
+        msg[4] = 0;
+        msg[5] = SEND_MSG_COMMAND;
+        msg[6] = 0x40 | channel;
+
+        // origin_payload
+        msg[7] = target_addr;
+        msg[8] = 0x2e << 2;
+        msg[9] = checksum(&msg[7..=8]);
+        msg[10] = IPMI_REMOTE_SWID;
+        msg[11] = 0;
+        msg[12] = 0x65;
+        msg[13..=16].copy_from_slice(&[0x57, 0x01, 0x00, 0x01]);
+        msg[17] = checksum(&msg[10..=16]);
+        //
+        msg[18] = checksum(&msg[3..=17]);
     }
 
-    fn payload(&self) -> Payload {
-        todo!()
-    }
+    #[cfg(test)]
+    fn build_test(msg: &mut [u8]) {
+        const IPMI_BMC_SLAVE_ADDR: u8 = 0x20;
+        const IPMI_NETFN_STORAGE: u16 = 0x0A;
+        const IPMI_REMOTE_SWID: u8 = 0x81;
+        const SEL_COMMAND: u8 = 0x40;
 
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
-        if data.len() < 7 {
-            Err(Error::Packet(EPacket::IpmiPayload(
-                EIpmiPayload::WrongLength,
-            )))?
-        }
-        let netfn_rqlun = NetfnLun::from(data[1]);
-        let rqseq_rslun = NetfnLun::from(data[4]);
-        Ok(IpmiRawResponse {
-            rq_addr: data[0].into(),
-            netfn_rqlun,
-            rs_addr: data[3].into(),
-            rqseq_rslun,
-            command: data[5].into(),
-            completion_code: data[6].into(),
-            data: {
-                let len = data.len() - 1;
-                if len == 7 {
-                    Rc::from([])
-                } else {
-                    Rc::from(&data[7..len])
-                }
-            },
-        })
+        msg[0] = IPMI_BMC_SLAVE_ADDR;
+        msg[1] = (IPMI_NETFN_STORAGE << 2) as u8;
+        msg[2] = checksum(&msg[0..=1]);
+        msg[3] = IPMI_REMOTE_SWID;
+        msg[4] = 0x08 << 2;
+        msg[5] = SEL_COMMAND;
+        msg[6] = checksum(&msg[3..=5]);
     }
 }

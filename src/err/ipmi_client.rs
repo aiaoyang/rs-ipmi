@@ -35,6 +35,9 @@ pub enum EClient {
 
     #[error("CompletionCode: {0:?}")]
     CompletionCode((CommandCode, CompletionCode)),
+
+    #[error("Init")]
+    Init,
 }
 
 impl From<EClient> for Error {

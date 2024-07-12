@@ -14,19 +14,72 @@ pub fn generate_iv() -> [u8; 16] {
     iv
 }
 
+pub fn aes_128_cbc_encrypt_new(data: &mut [u8], len: &mut usize, key: [u8; 16]) {
+    let iv = generate_iv();
+    type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+
+    padding_data_new(data, len, Aes128CbcEnc::block_size());
+    match Aes128CbcEnc::new(&key.into(), &iv.into())
+        .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(data, *len)
+    {
+        Ok(v) => println!("v:{v:x?}"),
+        Err(e) => {
+            panic!("payload: {len:?}, err: {e:?}");
+        }
+    }
+    let mut i = *len;
+    while i != 0 {
+        i -= 1;
+        data[i + iv.len()] = data[i];
+    }
+    data[0..iv.len()].copy_from_slice(&iv);
+}
+
+fn padding_data_new(data: &mut [u8], len: &mut usize, block_size: usize) {
+    let m = (*len + 1) % block_size;
+    let pad_len = if m != 0 {
+        block_size - (m)
+    } else {
+        return;
+    };
+
+    for i in 1..=pad_len {
+        data[*len] = i as u8;
+        *len += 1;
+    }
+
+    data[*len] = pad_len as u8;
+}
+
 pub fn aes_128_cbc_encrypt(mut payload_bytes: Vec<u8>, key: [u8; 16]) -> Vec<u8> {
     let iv = generate_iv();
     type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
     padding_data(&mut payload_bytes, Aes128CbcEnc::block_size());
     let data_len = payload_bytes.len();
-    let ct = Aes128CbcEnc::new(&key.into(), &iv.into())
+    let ct = match Aes128CbcEnc::new(&key.into(), &iv.into())
         .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut payload_bytes, data_len)
-        .unwrap();
+    {
+        Ok(v) => v,
+        Err(e) => {
+            println!("payload len: {}, msg_leng: {data_len}", payload_bytes.len());
+            panic!("payload: {payload_bytes:?}, err: {e:?}");
+        }
+    };
     let mut ret = iv.to_vec();
     ret.extend(ct);
     ret
 }
 
+pub fn aes_128_cbc_decrypt_new(encrypted_bytes: &mut [u8], key: [u8; 16]) -> Result<&[u8], Error> {
+    let iv: [u8; 16] = encrypted_bytes[..16].try_into()?;
+    let old_encrypted = &mut encrypted_bytes[16..];
+    type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+    let ct = Aes128CbcDec::new(&key.into(), &iv.into())
+        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(old_encrypted)?;
+    // structure of these packets is [[payload x bytes],[padding (1, 2, 3, 4, ...)], padding_length]
+    let number_of_padded_bytes: usize = ct[ct.len() - 1].into();
+    Ok(&ct[..(ct.len() - (number_of_padded_bytes + 1))])
+}
 pub fn aes_128_cbc_decrypt(encrypted_bytes: &mut [u8], key: [u8; 16]) -> Result<Vec<u8>, Error> {
     let iv: [u8; 16] = encrypted_bytes[..16].try_into()?;
     let old_encrypted = &mut encrypted_bytes[16..];

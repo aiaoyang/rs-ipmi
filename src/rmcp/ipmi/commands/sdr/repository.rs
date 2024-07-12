@@ -1,7 +1,7 @@
 use crate::commands::CommandCode;
 use crate::err::{ECommand, Error};
-use crate::request::ReqPayload;
-use crate::{ECommandCode, IpmiCommand, Payload};
+use crate::request::IpmiRequestPayload;
+use crate::{ECommandCode, IpmiCommand, NetFn, Packet, PacketPayload};
 pub struct GetSDRRepositoryInfo;
 
 #[derive(Debug)]
@@ -14,17 +14,8 @@ pub struct SDRRepositoryInfo {
 impl IpmiCommand for GetSDRRepositoryInfo {
     type Output = SDRRepositoryInfo;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
-    }
-
-    fn command(&self) -> CommandCode {
-        CommandCode::Raw(0x20)
-    }
-
-    fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
-    }
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x20);
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
@@ -39,5 +30,14 @@ impl IpmiCommand for GetSDRRepositoryInfo {
             sdr_version: data[0],
             record_count: u16::from_le_bytes([data[1], data[2]]),
         })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Vec::new(),
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }

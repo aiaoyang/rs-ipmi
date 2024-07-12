@@ -1,7 +1,9 @@
 pub mod boot_opt;
 pub mod control;
 
-use crate::{request::ReqPayload, ECommand, ECommandCode, IpmiCommand, Payload};
+use crate::{
+    request::IpmiRequestPayload, ECommand, ECommandCode, IpmiCommand, Packet, PacketPayload,
+};
 
 pub struct GetChassisStatus;
 
@@ -42,13 +44,13 @@ impl From<PowerState> for &'static str {
 
 impl IpmiCommand for GetChassisStatus {
     type Output = GetChassisStatusResp;
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Chassis
-    }
+    const NET_FN: crate::NetFn = crate::NetFn::Chassis;
+    const COMMAND: super::CommandCode = super::CommandCode::Chassis;
+
     fn parse(&self, data: &[u8]) -> Result<Self::Output, crate::Error> {
         if data.len() < 3 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                self.command(),
+                Self::COMMAND,
                 3,
                 data.len(),
                 data.into(),
@@ -62,11 +64,14 @@ impl IpmiCommand for GetChassisStatus {
             front_control_panel: if data.len() > 3 { data[3] } else { 0 },
         })
     }
-    fn command(&self) -> super::CommandCode {
-        super::CommandCode::Chassis
-    }
-    fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Vec::new(),
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }
 
@@ -82,20 +87,17 @@ pub enum ChassisControl {
 
 impl IpmiCommand for ChassisControl {
     type Output = ();
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Chassis
-    }
+    const NET_FN: crate::NetFn = crate::NetFn::Chassis;
+    const COMMAND: super::CommandCode = super::CommandCode::Raw(0x02);
     fn parse(&self, _data: &[u8]) -> Result<Self::Output, crate::Error> {
         Ok(())
     }
-    fn command(&self) -> super::CommandCode {
-        super::CommandCode::Raw(0x02)
-    }
-    fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
             Vec::from(&[*self as u8]),
-        ))
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }

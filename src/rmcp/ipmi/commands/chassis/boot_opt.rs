@@ -1,4 +1,6 @@
-use crate::{commands::CommandCode, request::ReqPayload, IpmiCommand, Payload};
+use crate::{
+    commands::CommandCode, request::IpmiRequestPayload, IpmiCommand, Packet, PacketPayload,
+};
 
 pub enum BootOpt {
     Pxe,
@@ -103,24 +105,19 @@ impl From<&BootOpt> for SetSystemBootOptions {
 
 impl IpmiCommand for BootOpt {
     type Output = ();
-
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Chassis
-    }
-
-    fn command(&self) -> crate::commands::CommandCode {
-        CommandCode::Raw(0x08)
-    }
-
-    fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
-            <SetSystemBootOptions>::from(self).to_vec(),
-        ))
-    }
+    const NET_FN: crate::NetFn = crate::NetFn::Chassis;
+    const COMMAND: CommandCode = CommandCode::Raw(0x08);
 
     fn parse(&self, _data: &[u8]) -> Result<Self::Output, crate::Error> {
         Ok(())
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            <SetSystemBootOptions>::from(self).to_vec(),
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }

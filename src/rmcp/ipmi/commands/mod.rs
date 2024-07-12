@@ -10,9 +10,11 @@ mod chassis;
 mod sdr;
 mod sel;
 
+use crate::NetFn;
+use crate::Packet;
 use crate::{
     err::Error,
-    rmcp::{request::ReqPayload, Payload},
+    rmcp::{request::IpmiRequestPayload, PacketPayload},
     IpmiCommand,
 };
 
@@ -26,6 +28,7 @@ pub enum CommandCode {
     GetChannelCipherSuites,
     ActivatePayload,
     DeactivatePayload,
+    SendMessage,
 }
 
 impl From<u8> for CommandCode {
@@ -38,6 +41,7 @@ impl From<u8> for CommandCode {
             0x01 => CommandCode::Chassis,
             0x48 => CommandCode::ActivatePayload,
             0x49 => CommandCode::DeactivatePayload,
+            0x34 => CommandCode::SendMessage,
             x => CommandCode::Raw(x),
         }
     }
@@ -53,6 +57,7 @@ impl From<CommandCode> for u8 {
             CommandCode::CloseSession => 0x3c,
             CommandCode::ActivatePayload => 0x48,
             CommandCode::DeactivatePayload => 0x49,
+            CommandCode::SendMessage => 0x34,
             CommandCode::Raw(x) => x,
         }
     }
@@ -67,28 +72,25 @@ impl CloseSessionCMD {
 impl IpmiCommand for CloseSessionCMD {
     type Output = ();
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::App
+    const NET_FN: NetFn = NetFn::App;
+    const COMMAND: CommandCode = CommandCode::CloseSession;
+
+    fn parse(&self, _data: &[u8]) -> Result<Self::Output, Error> {
+        Ok(())
     }
 
-    fn command(&self) -> CommandCode {
-        CommandCode::CloseSession
-    }
-
-    fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
             vec![
                 self.0 as u8,
                 (self.0 >> 8) as u8,
                 (self.0 >> 16) as u8,
                 (self.0 >> 24) as u8,
             ],
-        ))
-    }
+        ));
 
-    fn parse(&self, _data: &[u8]) -> Result<Self::Output, Error> {
-        Ok(())
+        Packet::new_with_data(data).write_to(buf)
     }
 }

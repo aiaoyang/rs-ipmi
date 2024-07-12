@@ -4,9 +4,9 @@ use nonmax::NonMaxU8;
 
 use crate::{
     commands::CommandCode,
-    request::ReqPayload,
+    request::IpmiRequestPayload,
     storage::sdr::{RecordId, SdrRecord},
-    ECommand, ECommandCode, Error, IpmiCommand, Payload,
+    ECommand, ECommandCode, Error, IpmiCommand, NetFn, Packet, PacketPayload,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -29,7 +29,7 @@ impl IpmiCommand for GetDeviceSdr {
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 2 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                self.command(),
+                Self::COMMAND,
                 2,
                 data.len(),
                 data.into(),
@@ -40,19 +40,14 @@ impl IpmiCommand for GetDeviceSdr {
         let data = &data[2..];
         Ok(RecordInfo {
             next_entry,
-            record: SdrRecord::parse(data, self.command())?,
+            record: SdrRecord::parse(data, Self::COMMAND)?,
         })
     }
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
-    }
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x23);
 
-    fn command(&self) -> crate::commands::CommandCode {
-        CommandCode::Raw(0x23)
-    }
-
-    fn payload(&self) -> crate::Payload {
+    fn write_to(&self, buf: &mut [u8]) -> usize {
         let mut data = vec![0u8; 6];
 
         data[0..2].copy_from_slice(
@@ -67,7 +62,9 @@ impl IpmiCommand for GetDeviceSdr {
         data[4] = self.offset;
         data[5] = self.bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), data))
+        let data =
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, data));
+        Packet::new_with_data(data).write_to(buf)
     }
 }
 

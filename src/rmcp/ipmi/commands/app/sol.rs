@@ -1,6 +1,11 @@
-use crate::{request::ReqPayload, ECommand, IpmiCommand, Payload};
+use crate::{
+    commands::CommandCode, request::IpmiRequestPayload, ECommand, IpmiCommand, NetFn,
+    PacketPayload, SolPayload,
+};
 
-pub struct ActivatePayloadCommand {}
+pub struct ActivatePayloadCommand<'a> {
+    pub data: Option<&'a [u8]>,
+}
 
 #[derive(Debug)]
 pub struct ActivatePayloadResp {
@@ -9,30 +14,16 @@ pub struct ActivatePayloadResp {
     pub udp_port: u16,
 }
 
-impl IpmiCommand for ActivatePayloadCommand {
+impl<'a> IpmiCommand for ActivatePayloadCommand<'a> {
     type Output = ActivatePayloadResp;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::App
-    }
-
-    fn command(&self) -> crate::commands::CommandCode {
-        crate::commands::CommandCode::ActivatePayload
-    }
-
-    fn payload(&self) -> crate::Payload {
-        let payload = [0x01, 0x01, 0x04, 0, 0, 0];
-        Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
-            payload.to_vec(),
-        ))
-    }
+    const NET_FN: NetFn = NetFn::App;
+    const COMMAND: CommandCode = CommandCode::ActivatePayload;
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, crate::Error> {
         if data.len() != 12 {
             Err(ECommand::NotEnoughData(crate::ECommandCode {
-                command: self.command(),
+                command: Self::COMMAND,
                 expected_len: 12,
                 get_len: data.len(),
                 data: data.to_vec(),
@@ -48,5 +39,37 @@ impl IpmiCommand for ActivatePayloadCommand {
             udp_port,
         };
         Ok(res)
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        // let data_payload = [0x01, 0x01, 0x08, 0, 0, 0];
+        let data_payload = [0x01, 0x01, 0x80 | 0x40 | 0x04 | 0x02, 0, 0, 0];
+        let packet_data = if let Some(data) = self.data {
+            PacketPayload::Sol(SolPayload::new(data.to_vec()))
+        } else {
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(
+                Self::NET_FN,
+                Self::COMMAND,
+                data_payload.to_vec(),
+            ))
+        };
+        let p = if self.data.is_some() {
+            crate::Packet::new(
+                crate::RmcpHeader::default(),
+                crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_payload(
+                    data_payload.len() as u16
+                )),
+                packet_data,
+            )
+        } else {
+            crate::Packet::new(
+                crate::RmcpHeader::default(),
+                crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_activate(
+                    data_payload.len() as u16,
+                )),
+                packet_data,
+            )
+        };
+        p.write_to(buf)
     }
 }

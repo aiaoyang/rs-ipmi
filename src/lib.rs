@@ -32,7 +32,7 @@
 //!
 //! ```
 
-pub use client::{IPMIClient, SessionActived, SessionInactived};
+pub use client::{ActiveClient, IPMIClient, InActiveClient};
 pub use err::*;
 pub use rmcp::*;
 

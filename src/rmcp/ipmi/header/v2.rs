@@ -6,11 +6,11 @@ use crate::{
 use super::AuthType;
 
 #[derive(Clone, Copy, Debug)]
-pub struct IpmiV2Header {
+pub struct IpmiV2Session {
     pub auth_type: AuthType,
     pub payload_enc: bool,
     pub payload_auth: bool,
-    pub payload_type: PayloadType,
+    pub payload_type: V2HeaderPayloadType,
     pub oem_iana: Option<u32>,
     pub oem_payload_id: Option<u16>,
     pub rmcp_plus_session_id: u32,
@@ -18,7 +18,20 @@ pub struct IpmiV2Header {
     pub payload_length: u16,
 }
 
-impl TryFrom<&[u8]> for IpmiV2Header {
+#[derive(Clone, Copy, Debug)]
+pub enum V2HeaderPayloadType {
+    Ipmi,
+    Sol,
+    Oem,
+    RmcpOpenSessionRequest,
+    RmcpOpenSessionResponse,
+    RAKP1,
+    RAKP2,
+    RAKP3,
+    RAKP4,
+}
+
+impl TryFrom<&[u8]> for IpmiV2Session {
     type Error = EIpmiHeader;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
@@ -30,14 +43,14 @@ impl TryFrom<&[u8]> for IpmiV2Header {
         let payload_bit_slice = value[1];
         let payload_enc = u8_ms_bit(payload_bit_slice, 0);
         let payload_auth = u8_ms_bit(payload_bit_slice, 1);
-        let payload_type: PayloadType = (payload_bit_slice & 0x3f).try_into()?;
+        let payload_type: V2HeaderPayloadType = (payload_bit_slice & 0x3f).try_into()?;
         let oem_iana: Option<u32>;
         let oem_payload_id: Option<u16>;
         let rmcp_plus_session_id: u32;
         let session_seq_number: u32;
         let payload_length: u16;
         match payload_type {
-            PayloadType::Oem => {
+            V2HeaderPayloadType::Oem => {
                 if value.len() != 18 {
                     Err(EV2Header::WrongLength)?
                 }
@@ -58,7 +71,7 @@ impl TryFrom<&[u8]> for IpmiV2Header {
             }
         }
 
-        Ok(IpmiV2Header {
+        Ok(IpmiV2Session {
             auth_type,
             payload_enc,
             payload_auth,
@@ -72,10 +85,10 @@ impl TryFrom<&[u8]> for IpmiV2Header {
     }
 }
 
-impl From<IpmiV2Header> for Vec<u8> {
-    fn from(val: IpmiV2Header) -> Self {
+impl From<&IpmiV2Session> for Vec<u8> {
+    fn from(val: &IpmiV2Session) -> Self {
         match val.payload_type {
-            PayloadType::Oem => {
+            V2HeaderPayloadType::Oem => {
                 let oem_iana_le = val.oem_iana.unwrap().to_le_bytes();
                 let oem_payload_id_le = val.oem_payload_id.unwrap().to_le_bytes();
                 let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
@@ -114,19 +127,56 @@ impl From<IpmiV2Header> for Vec<u8> {
     }
 }
 
-impl IpmiV2Header {
-    pub fn new_est(payload_length: u16) -> IpmiV2Header {
+impl IpmiV2Session {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        match self.payload_type {
+            V2HeaderPayloadType::Oem => {
+                let oem_iana_le = self.oem_iana.unwrap().to_le_bytes();
+                let oem_payload_id_le = self.oem_payload_id.unwrap().to_le_bytes();
+                let rmcp_ses_le = self.rmcp_plus_session_id.to_le_bytes();
+                let ses_seq_le = self.session_seq_number.to_le_bytes();
+                let len_le = self.payload_length.to_le_bytes();
+
+                buf[0] = self.auth_type.into();
+                let second = match (self.payload_enc, self.payload_auth) {
+                    (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(self.payload_type)),
+                    (true, false) => (0x1 << 7) | (u8::from(self.payload_type)),
+                    (false, true) => (0x1 << 6) | (u8::from(self.payload_type)),
+                    (false, false) => u8::from(self.payload_type),
+                };
+                buf[1] = second;
+                buf[2..6].copy_from_slice(&oem_iana_le);
+                buf[6..8].copy_from_slice(&oem_payload_id_le);
+                buf[8..12].copy_from_slice(&rmcp_ses_le);
+                buf[12..16].copy_from_slice(&ses_seq_le);
+                buf[16..18].copy_from_slice(&len_le);
+                19
+            }
+            _ => {
+                buf[0] = self.auth_type.into();
+                buf[1] = (self.payload_enc as u8) << 7
+                    | (self.payload_auth as u8) << 6
+                    | (u8::from(self.payload_type));
+                buf[2..6].copy_from_slice(&self.rmcp_plus_session_id.to_le_bytes());
+                buf[6..10].copy_from_slice(&self.session_seq_number.to_le_bytes());
+                buf[10..12].copy_from_slice(&self.payload_length.to_le_bytes());
+
+                12
+            }
+        }
+    }
+    pub fn new_est(payload_length: u16) -> IpmiV2Session {
         Self::new(
             AuthType::RmcpPlus,
             true,
             true,
-            PayloadType::Ipmi,
+            V2HeaderPayloadType::Ipmi,
             0,
             0,
             payload_length,
         )
     }
-    pub fn new_pre(payload_type: PayloadType, payload_length: u16) -> Self {
+    pub fn new_pre(payload_type: V2HeaderPayloadType, payload_length: u16) -> Self {
         Self::new(
             AuthType::RmcpPlus,
             false,
@@ -137,16 +187,39 @@ impl IpmiV2Header {
             payload_length,
         )
     }
+
+    pub fn new_sol_activate(payload_length: u16) -> Self {
+        Self::new(
+            AuthType::RmcpPlus,
+            true,
+            true,
+            V2HeaderPayloadType::Ipmi,
+            0x0,
+            0x0,
+            payload_length,
+        )
+    }
+    pub fn new_sol_payload(payload_length: u16) -> Self {
+        Self::new(
+            AuthType::RmcpPlus,
+            true,
+            true,
+            V2HeaderPayloadType::Sol,
+            0x0,
+            0x0,
+            payload_length,
+        )
+    }
     pub fn new(
         auth_type: AuthType,
         payload_enc: bool,
         payload_auth: bool,
-        payload_type: PayloadType,
+        payload_type: V2HeaderPayloadType,
         rmcp_plus_session_id: u32,
         session_seq_number: u32,
         payload_length: u16,
-    ) -> IpmiV2Header {
-        IpmiV2Header {
+    ) -> IpmiV2Session {
+        IpmiV2Session {
             auth_type,
             payload_enc,
             payload_auth,
@@ -160,50 +233,37 @@ impl IpmiV2Header {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum PayloadType {
-    Ipmi,
-    Sol,
-    Oem,
-    RmcpOpenSessionRequest,
-    RmcpOpenSessionResponse,
-    RAKP1,
-    RAKP2,
-    RAKP3,
-    RAKP4,
-}
-
-impl TryFrom<u8> for PayloadType {
+impl TryFrom<u8> for V2HeaderPayloadType {
     type Error = EV2Header;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value & 0b0011_1111 {
-            0x00 => Ok(PayloadType::Ipmi),
-            0x01 => Ok(PayloadType::Sol),
-            0x02 => Ok(PayloadType::Oem),
-            0x10 => Ok(PayloadType::RmcpOpenSessionRequest),
-            0x11 => Ok(PayloadType::RmcpOpenSessionResponse),
-            0x12 => Ok(PayloadType::RAKP1),
-            0x13 => Ok(PayloadType::RAKP2),
-            0x14 => Ok(PayloadType::RAKP3),
-            0x15 => Ok(PayloadType::RAKP4),
+            0x00 => Ok(V2HeaderPayloadType::Ipmi),
+            0x01 => Ok(V2HeaderPayloadType::Sol),
+            0x02 => Ok(V2HeaderPayloadType::Oem),
+            0x10 => Ok(V2HeaderPayloadType::RmcpOpenSessionRequest),
+            0x11 => Ok(V2HeaderPayloadType::RmcpOpenSessionResponse),
+            0x12 => Ok(V2HeaderPayloadType::RAKP1),
+            0x13 => Ok(V2HeaderPayloadType::RAKP2),
+            0x14 => Ok(V2HeaderPayloadType::RAKP3),
+            0x15 => Ok(V2HeaderPayloadType::RAKP4),
             _ => Err(EV2Header::UnsupportedPayloadType(value)),
         }
     }
 }
 
-impl From<PayloadType> for u8 {
-    fn from(val: PayloadType) -> Self {
+impl From<V2HeaderPayloadType> for u8 {
+    fn from(val: V2HeaderPayloadType) -> Self {
         match &val {
-            PayloadType::Ipmi => 0x00,
-            PayloadType::Sol => 0x01,
-            PayloadType::Oem => 0x02,
-            PayloadType::RmcpOpenSessionRequest => 0x10,
-            PayloadType::RmcpOpenSessionResponse => 0x11,
-            PayloadType::RAKP1 => 0x12,
-            PayloadType::RAKP2 => 0x13,
-            PayloadType::RAKP3 => 0x14,
-            PayloadType::RAKP4 => 0x15,
+            V2HeaderPayloadType::Ipmi => 0x00,
+            V2HeaderPayloadType::Sol => 0x01,
+            V2HeaderPayloadType::Oem => 0x02,
+            V2HeaderPayloadType::RmcpOpenSessionRequest => 0x10,
+            V2HeaderPayloadType::RmcpOpenSessionResponse => 0x11,
+            V2HeaderPayloadType::RAKP1 => 0x12,
+            V2HeaderPayloadType::RAKP2 => 0x13,
+            V2HeaderPayloadType::RAKP3 => 0x14,
+            V2HeaderPayloadType::RAKP4 => 0x15,
         }
     }
 }

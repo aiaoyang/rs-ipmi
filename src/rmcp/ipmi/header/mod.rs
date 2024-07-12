@@ -3,41 +3,47 @@ pub mod v2;
 
 use crate::err::{EIpmiHeader, Error};
 use v1::IpmiV1Header;
-use v2::{IpmiV2Header, PayloadType};
+use v2::{IpmiV2Session, V2HeaderPayloadType};
 
 #[derive(Clone, Copy, Debug)]
-pub enum IpmiHeader {
+pub enum IpmiSession {
     V1_5(IpmiV1Header),
-    V2_0(IpmiV2Header),
+    V2_0(IpmiV2Session),
 }
 
-impl TryFrom<&[u8]> for IpmiHeader {
+impl TryFrom<&[u8]> for IpmiSession {
     type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let auth_type: AuthType = value[0].try_into()?;
 
         match auth_type {
-            AuthType::RmcpPlus => Ok(IpmiHeader::V2_0(value.try_into()?)),
-            _ => Ok(IpmiHeader::V1_5(value.try_into()?)),
+            AuthType::RmcpPlus => Ok(IpmiSession::V2_0(value.try_into()?)),
+            _ => Ok(IpmiSession::V1_5(value.try_into()?)),
         }
     }
 }
 
-impl From<IpmiHeader> for Vec<u8> {
-    fn from(val: IpmiHeader) -> Self {
+impl From<&IpmiSession> for Vec<u8> {
+    fn from(val: &IpmiSession) -> Self {
         match val {
-            IpmiHeader::V1_5(header) => header.into(),
-            IpmiHeader::V2_0(header) => header.into(),
+            IpmiSession::V1_5(header) => header.into(),
+            IpmiSession::V2_0(header) => header.into(),
         }
     }
 }
 
-impl IpmiHeader {
-    pub fn payload_type(&self) -> PayloadType {
+impl IpmiSession {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
         match self {
-            IpmiHeader::V1_5(_header) => PayloadType::Ipmi,
-            IpmiHeader::V2_0(header) => header.payload_type,
+            IpmiSession::V1_5(s) => s.write_to(buf),
+            IpmiSession::V2_0(s) => s.write_to(buf),
+        }
+    }
+    pub fn payload_type(&self) -> V2HeaderPayloadType {
+        match self {
+            IpmiSession::V1_5(_header) => V2HeaderPayloadType::Ipmi,
+            IpmiSession::V2_0(header) => header.payload_type,
         }
     }
 
@@ -46,9 +52,9 @@ impl IpmiHeader {
         match auth_type {
             AuthType::RmcpPlus => {
                 let length = 12;
-                let payload_type: PayloadType = second_byte.try_into()?;
+                let payload_type: V2HeaderPayloadType = second_byte.try_into()?;
                 match payload_type {
-                    PayloadType::Oem => Ok(length + 6),
+                    V2HeaderPayloadType::Oem => Ok(length + 6),
                     _ => Ok(length),
                 }
             }
@@ -58,22 +64,22 @@ impl IpmiHeader {
     }
     pub fn set_payload_len(&mut self, len: usize) {
         match self {
-            IpmiHeader::V1_5(h) => h.payload_length = len as u8,
-            IpmiHeader::V2_0(h) => h.payload_length = len as u16,
+            IpmiSession::V1_5(h) => h.payload_length = len as u8,
+            IpmiSession::V2_0(h) => h.payload_length = len as u16,
         }
     }
 
     pub fn payload_len(&self) -> usize {
         match self {
-            IpmiHeader::V1_5(a) => a.payload_length.into(),
-            IpmiHeader::V2_0(a) => a.payload_length.into(),
+            IpmiSession::V1_5(a) => a.payload_length.into(),
+            IpmiSession::V2_0(a) => a.payload_length.into(),
         }
     }
 
     pub fn seq_num(&self) -> u32 {
-        match self{
-            IpmiHeader::V1_5(h) => h.session_seq_number,
-            IpmiHeader::V2_0(h) => h.session_seq_number, 
+        match self {
+            IpmiSession::V1_5(h) => h.session_seq_number,
+            IpmiSession::V2_0(h) => h.session_seq_number,
         }
     }
 }

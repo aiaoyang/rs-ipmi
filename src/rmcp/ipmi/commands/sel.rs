@@ -6,8 +6,8 @@ use std::{
 use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
-    rmcp::{request::ReqPayload, IpmiCommand, Payload},
-    ECommandCode, SelEntry,
+    rmcp::{request::IpmiRequestPayload, IpmiCommand, PacketPayload},
+    ECommandCode, NetFn, Packet, SelEntry,
 };
 
 #[derive(Clone)]
@@ -32,22 +32,13 @@ pub struct SelInfo {
 impl IpmiCommand for GetSelInfo {
     type Output = SelInfo;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
-    }
-
-    fn command(&self) -> CommandCode {
-        0x40.into()
-    }
-
-    fn payload(&self) -> Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
-    }
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x40);
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 14 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                self.command(),
+                Self::COMMAND,
                 14,
                 data.len(),
                 data.into(),
@@ -65,6 +56,16 @@ impl IpmiCommand for GetSelInfo {
             support_delete: data[13] & 0x08 != 0,
             overflow: data[13] & 0x80 != 0,
         })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Vec::new(),
+        ));
+        let p = Packet::new_with_data(data);
+        p.write_to(buf)
     }
 }
 
@@ -85,15 +86,26 @@ pub struct GetSelEntry {
 
 impl IpmiCommand for GetSelEntry {
     type Output = SelRecord;
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x43);
+
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
+        if data.len() < 2 {
+            Err(ECommand::NotEnoughData(ECommandCode::new(
+                Self::COMMAND,
+                2,
+                data.len(),
+                data.into(),
+            )))?
+        }
+        Ok(SelRecord {
+            next_record_id: [data[0], data[1]],
+            entry: SelEntry::parse(&data[2..])?,
+            raw_data: Rc::from(data),
+        })
     }
 
-    fn command(&self) -> CommandCode {
-        0x43.into()
-    }
-
-    fn payload(&self) -> Payload {
+    fn write_to(&self, buf: &mut [u8]) -> usize {
         let GetSelEntry {
             reservation_id,
             record_id,
@@ -108,27 +120,12 @@ impl IpmiCommand for GetSelEntry {
         data[4] = *offset;
         data[5] = bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        crate::rmcp::Payload::IpmiReq(ReqPayload::new(
-            self.netfn(),
-            self.command(),
+        let data = crate::rmcp::PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
             data.to_vec(),
-        ))
-    }
-
-    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
-        if data.len() < 2 {
-            Err(ECommand::NotEnoughData(ECommandCode::new(
-                self.command(),
-                2,
-                data.len(),
-                data.into(),
-            )))?
-        }
-        Ok(SelRecord {
-            next_record_id: [data[0], data[1]],
-            entry: SelEntry::parse(&data[2..])?,
-            raw_data: Rc::from(data),
-        })
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }
 

@@ -48,8 +48,8 @@ impl TryFrom<&[u8]> for IpmiV1Header {
     }
 }
 
-impl From<IpmiV1Header> for Vec<u8> {
-    fn from(val: IpmiV1Header) -> Self {
+impl From<&IpmiV1Header> for Vec<u8> {
+    fn from(val: &IpmiV1Header) -> Self {
         let seq_be = val.session_seq_number.to_be_bytes();
         let ses_be = val.session_id.to_be_bytes();
         let mut result: Vec<u8> = Vec::new();
@@ -81,4 +81,42 @@ impl Default for IpmiV1Header {
             payload_length: 0,
         }
     }
+}
+
+impl IpmiV1Header {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        let seq_be = self.session_seq_number.to_be_bytes();
+        let ses_be = self.session_id.to_be_bytes();
+        buf[0] = self.auth_type.into();
+        buf[1..5].copy_from_slice(&seq_be);
+        buf[5..9].copy_from_slice(&ses_be);
+        match self.auth_type {
+            AuthType::None => {
+                buf[9] = self.payload_length;
+                9
+            }
+            _ => {
+                let auth_be = self.auth_code.unwrap().to_be_bytes();
+                buf[9..25].copy_from_slice(&auth_be);
+                buf[25] = self.payload_length;
+                26
+            }
+        }
+    }
+}
+
+#[test]
+fn test_old() {
+    let buf = &mut [0_u8; 1024];
+    let h = IpmiV1Header {
+        auth_type: AuthType::MD5,
+        session_seq_number: 0,
+        session_id: 0,
+        auth_code: Some(1),
+        payload_length: 10,
+    };
+
+    let old: Vec<u8> = (&h).into();
+    let n = h.write_to(buf);
+    assert_eq!(&old, &buf[..n]);
 }

@@ -1,21 +1,21 @@
 use crate::{
     commands::{CommandCode, Privilege},
     err::{ECommand, Error},
-    rmcp::{IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader},
+    rmcp::{IpmiSession, IpmiV2Session, Packet, PacketPayload, RmcpHeader, V2HeaderPayloadType},
     ECommandCode,
 };
 
 #[derive(Clone, Debug)]
 
-pub enum RMCPPlusOpenSession {
+pub enum RMCPPlusOpenSessionPayload {
     Request(RMCPPlusOpenSessionRequest),
     Response(RMCPPlusOpenSessionResponse),
 }
 
-impl From<RMCPPlusOpenSession> for Vec<u8> {
-    fn from(val: RMCPPlusOpenSession) -> Self {
+impl From<&RMCPPlusOpenSessionPayload> for Vec<u8> {
+    fn from(val: &RMCPPlusOpenSessionPayload) -> Self {
         match val {
-            RMCPPlusOpenSession::Request(request) => request.clone().into(),
+            RMCPPlusOpenSessionPayload::Request(request) => request.clone().into(),
             _ => todo!(),
         }
     }
@@ -128,15 +128,15 @@ impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
     }
 }
 
-impl From<RMCPPlusOpenSessionRequest> for Packet {
+impl<'a> From<RMCPPlusOpenSessionRequest> for Packet<'a> {
     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
         Packet::new(
             RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                PayloadType::RmcpOpenSessionRequest,
+            IpmiSession::V2_0(IpmiV2Session::new_pre(
+                V2HeaderPayloadType::RmcpOpenSessionRequest,
                 32,
             )),
-            Payload::Rmcp(RMCPPlusOpenSession::Request(val)),
+            PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Request(val)),
         )
     }
 }

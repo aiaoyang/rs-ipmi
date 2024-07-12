@@ -11,20 +11,15 @@ pub mod storage;
 mod header;
 mod payload;
 
-use crate::Packet;
-use crate::RmcpHeader;
 use crate::{
     commands::CommandCode,
     err::{ECommand, EIpmiPayload, Error},
 };
 
-use super::Payload;
-
 pub trait IpmiCommand {
     type Output;
-    fn netfn(&self) -> NetFn;
-    fn command(&self) -> CommandCode;
-    fn payload(&self) -> Payload;
+    const NET_FN: NetFn;
+    const COMMAND: CommandCode;
 
     fn check_cc_success(cc: CompletionCode) -> Result<CompletionCode, Error> {
         if cc.is_success() {
@@ -36,13 +31,7 @@ pub trait IpmiCommand {
 
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error>;
 
-    fn gen_packet(&self) -> Packet {
-        Packet::new(
-            RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_est(32)),
-            self.payload(),
-        )
-    }
+    fn write_to(&self, buf: &mut [u8]) -> usize;
 }
 
 #[derive(Clone, Debug, Copy)]

@@ -1,28 +1,27 @@
-use std::{fmt::Debug, io::Read, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use chrono::Duration;
 use log::{info, warn};
 use tokio::{
-    io::AsyncReadExt,
     net::{ToSocketAddrs, UdpSocket},
     time::timeout,
 };
 
 use crate::{
-    commands::{CloseSessionCMD, CommandCode, GetChannelAuthCapabilitiesRequest, Privilege},
+    commands::{CloseSessionCMD, GetChannelAuthCapabilitiesRequest, Privilege},
+    crypto::aes_128_cbc_encrypt_new,
     err::{EClient, Error},
+    raw::IpmiRawRequest,
     rmcp::{
         crypto::{add_tailer, aes_128_cbc_encrypt, hash_hmac_sha1},
         open_session::{
-            AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm, RMCPPlusOpenSession,
-            RMCPPlusOpenSessionRequest, StatusCode,
+            AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm,
+            RMCPPlusOpenSessionPayload, RMCPPlusOpenSessionRequest, StatusCode,
         },
-        rakp::{RAKPMessage1, RAKPMessage3, Rakp},
-        request::IpmiRawRequest,
-        response::RespPayload,
-        CompletionCode, Packet, Payload,
+        rakp::{RAKPMessage1, RAKPMessage3, RakpPayload},
+        response::IpmiRespPayload,
+        CompletionCode, Packet, PacketPayload,
     },
-    IpmiCommand, NetFn,
+    IpmiCommand,
 };
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -70,39 +69,39 @@ impl Default for SessionInactived {
 
 #[derive(Clone)]
 pub struct SessionActived {
-    seq_number: u32,
-    managed_id: u32,
-    k1: [u8; 20],
-    k2: [u8; 20],
-}
-
-impl From<SessionInactived> for SessionActived {
-    fn from(value: SessionInactived) -> Self {
-        Self {
-            seq_number: value.seq_number,
-            managed_id: value.managed_id.unwrap(),
-            k1: value.k1.unwrap(),
-            k2: value.k2.unwrap(),
-        }
-    }
+    pub seq_number: u32,
+    pub managed_id: u32,
+    pub k1: [u8; 20],
+    pub k2: [u8; 20],
 }
 
 /// default retry_duration is 300ms
 #[derive(Debug, Clone)]
-pub struct IPMIClient<S: Clone> {
-    client_socket: Arc<UdpSocket>,
-    session: S,
-    privilege: Privilege,
+pub struct IPMIClient<SESSION: Clone, SOCKET, A: ToSocketAddrs = String> {
+    conf: ClientConfig<A>,
+    socket: SOCKET,
+    pub(crate) session: SESSION,
+
+    buffer: ([u8; 1024], usize),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClientConfig<A: ToSocketAddrs = String> {
+    remote_addr: A,
+    // privilege: Privilege,
     username: Box<str>,
     password: Box<str>,
-    cipher_list_index: u8,
+    // cipher_list_index: u8,
     socket_recv_timeout: Duration,
     retry: u8,
     retry_duration: Duration,
     auto_reconnect: bool,
 }
 
-impl IPMIClient<SessionInactived> {
+pub type ActiveClient = IPMIClient<SessionActived, Arc<UdpSocket>>;
+pub type InActiveClient = IPMIClient<SessionInactived, ()>;
+
+impl InActiveClient {
     /// Creates client for running IPMI commands against a BMC.
     ///
     /// # Arguments
@@ -124,11 +123,11 @@ impl IPMIClient<SessionInactived> {
     ///         .await;
     /// # })
     /// ```
-    pub async fn new<A: ToSocketAddrs + Debug>(
-        ipmi_server_addr: A,
+    pub async fn new(
+        ipmi_server_addr: String,
         username: &str,
         password: &str,
-    ) -> Result<IPMIClient<SessionInactived>> {
+    ) -> Result<InActiveClient> {
         let client_socket = UdpSocket::bind("0.0.0.0:0")
             .await
             .map_err(EClient::FailedBind)?;
@@ -137,36 +136,40 @@ impl IPMIClient<SessionInactived> {
             .await
             .map_err(|e| EClient::ConnectToIPMIServer(format!("{}: {:?}", e, &ipmi_server_addr)))?;
         Ok(IPMIClient {
-            client_socket: Arc::new(client_socket),
+            socket: (),
             session: SessionInactived::default(),
-            username: Box::from(username),
-            password: Box::from(password),
-            cipher_list_index: 0,
-            privilege: Privilege::Callback,
-            socket_recv_timeout: Duration::from_secs(5),
-            retry: 0,
-            retry_duration: Duration::from_millis(300),
-            auto_reconnect: false,
+            conf: ClientConfig {
+                remote_addr: ipmi_server_addr,
+                username: Box::from(username),
+                password: Box::from(password),
+                // cipher_list_index: 0,
+                // privilege: Privilege::Callback,
+                socket_recv_timeout: Duration::from_secs(5),
+                retry: 0,
+                retry_duration: Duration::from_millis(300),
+                auto_reconnect: false,
+            },
+            buffer: ([0; 1024], 0),
         })
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.socket_recv_timeout = timeout;
+        self.conf.socket_recv_timeout = timeout;
         self
     }
 
     pub fn retry(mut self, n: u8) -> Self {
-        self.retry = n;
+        self.conf.retry = n;
         self
     }
 
     pub fn retry_duration(mut self, duration: Duration) -> Self {
-        self.retry_duration = duration;
+        self.conf.retry_duration = duration;
         self
     }
 
     pub fn auto_reconnect(mut self, b: bool) -> Self {
-        self.auto_reconnect = b;
+        self.conf.auto_reconnect = b;
         self
     }
     /// Set the read timeout on the ipmi client UDP socket. Default timeout for the socket is set to 20 seconds
@@ -212,26 +215,38 @@ impl IPMIClient<SessionInactived> {
     ///     });
     ///
     /// ```
-    pub async fn activate(mut self) -> Result<IPMIClient<SessionActived>> {
-        self.session.password_mac_key = Some(self.password.as_bytes().to_vec());
+    pub async fn activate(mut self) -> Result<ActiveClient> {
+        let socket = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(EClient::FailedBind)?;
+        socket.connect(&self.conf.remote_addr).await.map_err(|e| {
+            EClient::ConnectToIPMIServer(format!("{}: {:?}", e, &self.conf.remote_addr))
+        })?;
+        self.session.password_mac_key = Some(self.conf.password.as_bytes().to_vec());
 
-        self.get_channel_auth_cap().await?; // Get channel auth capabilites and set cipher
-        self.rmcpplus_session_authenticate().await // rmcp open session and authenticate
-                                                   // c.set_privilege_level()?;
+        self.get_channel_auth_cap(&socket).await?; // Get channel auth capabilites and set cipher
+        self.rmcpplus_session_authenticate(socket).await // rmcp open session and authenticate
+                                                         // c.set_privilege_level()?;
     }
 
-    async fn get_channel_auth_cap(&mut self) -> Result<()> {
+    async fn get_channel_auth_cap(&mut self, socket: &UdpSocket) -> Result<()> {
         let get_channel_auth_cap_packet =
             GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator)
                 .create_packet();
-        self.send_unauth_packet_retry(get_channel_auth_cap_packet)
-            .await?;
+        Self::send_unauth_packet_retry(
+            socket,
+            &mut self.session,
+            get_channel_auth_cap_packet,
+            &self.conf,
+            &mut self.buffer.0,
+        )
+        .await?;
 
         Ok(())
     }
 
     fn gen_rk2_auth_code(&self) -> [u8; 20] {
-        let mut buf: Vec<u8> = vec![0; 58 + self.username.len()];
+        let mut buf: Vec<u8> = vec![0; 58 + self.conf.username.len()];
         buf[..4].copy_from_slice(
             &self
                 .session
@@ -250,8 +265,8 @@ impl IPMIClient<SessionInactived> {
         );
         buf[40..56].copy_from_slice(&self.session.managed_system_guid.unwrap().to_le_bytes());
         buf[56] = Self::privilege(false, Privilege::Administrator);
-        buf[57] = self.username.len().try_into().unwrap();
-        buf[58..].copy_from_slice(self.username.as_bytes());
+        buf[57] = self.conf.username.len().try_into().unwrap();
+        buf[58..].copy_from_slice(self.conf.username.as_bytes());
 
         hash_hmac_sha1(self.session.password_mac_key.as_ref().unwrap(), &buf)
     }
@@ -262,8 +277,9 @@ impl IPMIClient<SessionInactived> {
         append_u32_to_vec(&mut buf, self.session.remote_console_session_id.unwrap());
 
         buf.push(Self::privilege(false, Privilege::Administrator));
-        buf.push(self.username.len().try_into().unwrap());
-        self.username
+        buf.push(self.conf.username.len().try_into().unwrap());
+        self.conf
+            .username
             .as_bytes()
             .iter()
             .for_each(|char| buf.push(*char));
@@ -281,7 +297,7 @@ impl IPMIClient<SessionInactived> {
             .unwrap()
     }
 
-    async fn rmcpplus_session_authenticate(mut self) -> Result<IPMIClient<SessionActived>> {
+    async fn rmcpplus_session_authenticate(mut self, socket: UdpSocket) -> Result<ActiveClient> {
         // RMCP+ Open Session Request
         let rmcp_plus_open_session_packet: Packet = RMCPPlusOpenSessionRequest::new(
             0,
@@ -292,10 +308,15 @@ impl IPMIClient<SessionInactived> {
             ConfidentialityAlgorithm::AesCbc128,
         )
         .into();
-        let osr = self
-            .send_unauth_packet_retry(rmcp_plus_open_session_packet)
-            .await?;
-        let Payload::Rmcp(RMCPPlusOpenSession::Response(msg)) = osr.payload else {
+        let osr = Self::send_unauth_packet_retry(
+            &socket,
+            &mut self.session,
+            rmcp_plus_open_session_packet,
+            &self.conf,
+            &mut self.buffer.0,
+        )
+        .await?;
+        let PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Response(msg)) = osr.data else {
             Err(EClient::MisformedResponse)?
         };
 
@@ -311,13 +332,20 @@ impl IPMIClient<SessionInactived> {
             self.session.remote_console_random_number,
             false,
             Privilege::Administrator,
-            self.username.to_string(),
+            self.conf.username.to_string(),
         );
         let rakp1_packet: Packet = rk1.into();
 
         // RAKP Message 2
-        let r2_pkt = self.send_unauth_packet_retry(rakp1_packet).await?;
-        let Payload::Rakp(Rakp::Message2(msg2)) = &r2_pkt.payload else {
+        let r2_pkt = Self::send_unauth_packet_retry(
+            &socket,
+            &mut self.session,
+            rakp1_packet,
+            &self.conf,
+            &mut self.buffer.0,
+        )
+        .await?;
+        let PacketPayload::Rakp(RakpPayload::Message2(msg2)) = &r2_pkt.data else {
             Err(EClient::MisformedResponse)?
         };
 
@@ -340,7 +368,6 @@ impl IPMIClient<SessionInactived> {
                 Err(EClient::FailedToValidateRAKP2)?
             }
         }
-
         self.create_session_keys()?;
 
         // RAKP Message 3
@@ -353,9 +380,16 @@ impl IPMIClient<SessionInactived> {
         .into();
 
         // RAKP Message 4
-        let r4_pkt = self.send_unauth_packet_retry(rakp3_packet).await?;
+        let r4_pkt = Self::send_unauth_packet_retry(
+            &socket,
+            &mut self.session,
+            rakp3_packet,
+            &self.conf,
+            &mut self.buffer.0,
+        )
+        .await?;
 
-        let Payload::Rakp(Rakp::Message4(msg4)) = r4_pkt.payload else {
+        let PacketPayload::Rakp(RakpPayload::Message4(msg4)) = r4_pkt.data else {
             Err(EClient::MisformedResponse)?
         };
 
@@ -369,39 +403,73 @@ impl IPMIClient<SessionInactived> {
             self.session.state = State::Established;
         }
 
-        Ok(IPMIClient::from(self))
+        Ok(ActiveClient {
+            socket: Arc::new(socket),
+            conf: self.conf,
+            session: SessionActived {
+                seq_number: self.session.seq_number,
+                managed_id: self.session.managed_id.unwrap(),
+                k1: self.session.k1.unwrap(),
+                k2: self.session.k2.unwrap(),
+            },
+            buffer: self.buffer,
+        })
+        // Ok(IPMIClient::from(self))
     }
 
-    async fn send_unauth_packet(&mut self, request_packet: Packet) -> Result<Packet> {
-        let x: Vec<u8> = request_packet.into();
-        self.client_socket
-            .send(&x)
-            .await
-            .map_err(EClient::FailedSend)?;
-        let mut buf = [0_u8; 1024];
-        let Ok((n_bytes, _)) = self.client_socket.recv_from(&mut buf).await else {
+    async fn send_unauth_packet<'a>(
+        socket: &UdpSocket,
+        session: &mut SessionInactived,
+        request_packet: Packet<'a>,
+        buf: &'a mut [u8],
+    ) -> Result<Packet<'a>> {
+        let x = request_packet.write_to(buf);
+        socket.send(&buf[..x]).await.map_err(EClient::FailedSend)?;
+        let Ok((n_bytes, _)) = socket.recv_from(buf).await else {
             info!("send_unauth_packet");
             Err(EClient::NoResponse)?
         };
 
-        match self.session.k2 {
-            Some(k2) => Ok(Packet::try_from((&buf[..n_bytes], &k2))?),
+        match session.k2 {
+            Some(k2) => Ok(Packet::decode_from(&k2, &mut buf[..n_bytes], n_bytes)?),
             None => Ok(Packet::try_from(&buf[..n_bytes])?),
         }
     }
-    async fn send_unauth_packet_retry(&mut self, request_packet: Packet) -> Result<Packet> {
-        let mut n: i32 = self.retry as i32;
-        while n >= 0 {
-            let res = self.send_unauth_packet(request_packet.clone()).await;
-            if res.is_ok() || n <= 0 {
-                return res;
-            }
-            warn!(
-                "retry packet: {:?}",
-                request_packet.ipmi_header.payload_type()
-            );
-            tokio::time::sleep(self.retry_duration).await;
-            n -= 1;
+
+    async fn send_unauth_packet_retry<'a>(
+        socket: &UdpSocket,
+        session: &mut SessionInactived,
+        request_packet: Packet<'a>,
+        conf: &ClientConfig,
+        buf: &'a mut [u8],
+    ) -> Result<Packet<'a>> {
+        let mut retry: i32 = conf.retry as i32;
+        let duration = conf.retry_duration;
+        let n = request_packet.write_to(buf);
+        println!("fuck");
+        println!("packet: {:x?}", &buf[..n]);
+
+        while retry >= 0 {
+            let packet = &buf[..n];
+            socket.send(packet).await.map_err(EClient::FailedSend)?;
+            let Ok(Ok((n_bytes, _))) = timeout(Duration::from_secs(1), socket.recv_from(buf)).await
+            else {
+                if retry <= 0 {
+                    info!("send_unauth_packet");
+                    Err(EClient::NoResponse)?
+                } else {
+                    tokio::time::sleep(duration).await;
+                    retry -= 1;
+                    warn!("retry packet");
+                    continue;
+                }
+            };
+
+            if let Some(k2) = session.k2 {
+                return Packet::decode_from(&k2, &mut buf[..n_bytes], n_bytes);
+            } else {
+                return Packet::try_from(&buf[..n_bytes]);
+            };
         }
         Err(EClient::NoResponse)?
     }
@@ -423,12 +491,14 @@ impl IPMIClient<SessionInactived> {
         );
         sik_input.push(0x14);
         sik_input.push(
-            self.username
+            self.conf
+                .username
                 .len()
                 .try_into()
                 .map_err(EClient::UsernameOver255InLength)?,
         );
-        self.username
+        self.conf
+            .username
             .as_bytes()
             .iter()
             .for_each(|char| sik_input.push(*char));
@@ -452,209 +522,206 @@ pub fn append_u128_to_vec(main_vec: &mut Vec<u8>, append: u128) {
     append.to_le_bytes().map(|byte| main_vec.push(byte));
 }
 
-impl From<IPMIClient<SessionInactived>> for IPMIClient<SessionActived> {
-    fn from(inactive: IPMIClient<SessionInactived>) -> Self {
-        Self {
-            client_socket: inactive.client_socket,
-            session: inactive.session.into(),
-            privilege: inactive.privilege,
-            username: inactive.username,
-            password: inactive.password,
-            cipher_list_index: inactive.cipher_list_index,
-            socket_recv_timeout: inactive.socket_recv_timeout,
-            retry: inactive.retry,
-            retry_duration: inactive.retry_duration,
-            auto_reconnect: inactive.auto_reconnect,
-        }
-    }
-}
-
-impl IPMIClient<SessionActived> {
-    fn encrypt_packet(&self, req_packet: &mut Packet) -> Vec<u8> {
-        let payload_bytes: Vec<u8> = req_packet.payload.clone().into();
-        let encrypted_payload =
-            aes_128_cbc_encrypt(payload_bytes, self.session.k2[..16].try_into().unwrap());
-
-        req_packet
-            .ipmi_header
-            .set_payload_len(encrypted_payload.len());
-        let mut packet_vec: Vec<u8> = (&req_packet.rmcp_header).into();
-        let mut session_payload_slice: Vec<u8> = req_packet.ipmi_header.into();
-        session_payload_slice.extend(encrypted_payload);
-        add_tailer(&mut session_payload_slice, self.session.k1);
-        packet_vec.extend(session_payload_slice);
-        packet_vec
+impl ActiveClient {
+    pub async fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.socket.recv(buf).await
     }
 
     pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
-        let mut packet = ipmi_cmd.gen_packet();
-
-        let resp = match self.send_and_decrypt_packet(&mut packet).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                if self.auto_reconnect {
-                    self.re_connect().await?;
-                }
-                return Err(e);
-            }
-        };
-        let (data, code) = resp.payload.data_and_completion();
-        if let Some(resp_cmd) = resp.payload.command() {
-            if ipmi_cmd.command() != resp_cmd {
-                let addr = self.client_socket.peer_addr();
-                let err = format!(
-                    "peer: {addr:?}, req packet command: {:?}, seq: {}, resp command: {:x?}, seq: {}",
-                    packet.payload.command(),
-                    packet.ipmi_header.seq_num(),
-                    resp.payload.command(),
-                    resp.ipmi_header.seq_num(),
-                );
-                if self.auto_reconnect {
-                    self.re_connect().await?;
-                }
-                return Err(Error::RawString(err));
-            }
-        }
-
-        let CompletionCode::CompletedNormally = code else {
-            Err(EClient::CompletionCode((ipmi_cmd.command(), code)))?
-        };
-
-        ipmi_cmd.parse(data)
+        // self.buffer.1 = ipmi_cmd.write_to(&mut self.buffer.0);
+        //
+        // let resp = match self.send_and_decrypt_packet(&mut packet).await {
+        //     Ok(resp) => resp,
+        //     Err(e) => {
+        //         if self.conf.auto_reconnect {
+        //             self.re_connect().await?;
+        //         }
+        //         return Err(e);
+        //     }
+        // };
+        // let (data, code) = resp.data.data_and_completion();
+        // if let Some(resp_cmd) = resp.data.command() {
+        //     if <CMD as IpmiCommand>::COMMAND != resp_cmd {
+        //         let addr = self.socket.peer_addr();
+        //         let err = format!(
+        //             "peer: {addr:?}, req packet command: {:?}, seq: {}, resp command: {:x?}, seq: {}",
+        //             packet.data.command(),
+        //             packet.ipmi_session.seq_num(),
+        //             resp.data.command(),
+        //             resp.ipmi_session.seq_num(),
+        //         );
+        //         if self.auto_reconnect {
+        //             self.re_connect().await?;
+        //         }
+        //         return Err(Error::RawString(err));
+        //     }
+        // }
+        //
+        // let CompletionCode::CompletedNormally = code else {
+        //     Err(EClient::CompletionCode((
+        //         <CMD as IpmiCommand>::COMMAND,
+        //         code,
+        //     )))?
+        // };
+        //
+        // ipmi_cmd.parse(data)
+        todo!()
     }
 
-    async fn send_and_decrypt_packet(&mut self, packet: &mut Packet) -> Result<Packet> {
-        Packet::try_from((
-            self.send_packet_retry(packet).await?.as_slice(),
-            &self.session.k2,
-        ))
+    pub async fn send_and_decrypt_packet<'a>(
+        &mut self,
+        packet: &mut Packet<'a>,
+    ) -> Result<Packet<'a>> {
+        // Packet::try_from((
+        //     self.send_packet_retry(packet).await?.as_slice(),
+        //     &self.session.k2,
+        // ))
+        todo!()
     }
 
-    pub async fn send_packet_retry(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
-        let mut n: i32 = self.retry as i32;
-        let mut retry_counter = 0;
-        while n >= 0 {
-            let res = self.send_packet(request_packet).await;
-            if res.is_ok() || n <= 0 {
-                return res;
-            }
-            retry_counter += 1;
-            warn!(
-                "retry packet[{retry_counter}]time : {:?}",
-                request_packet.payload.command()
-            );
-            tokio::time::sleep(self.retry_duration).await;
-            n -= 1;
-        }
+    pub async fn send_packet_retry<'a>(&'a mut self) -> Result<&'a [u8]> {
+        // let mut n: i32 = self.conf.retry as i32;
+        // let mut retry_counter = 0;
+        // let retry_duration = self.conf.retry_duration;
+        // let (buffer, len) = &mut self.buffer;
+        // while n >= 0 {
+        //     let res = send_packet(&self.socket, &self.conf, buffer, len, &mut self.session).await;
+        //     if res.is_ok() || n <= 0 {
+        //         return res;
+        //     }
+        //     retry_counter += 1;
+        //     // warn!(
+        //     //     "retry packet[{retry_counter}]time : {:?}",
+        //     //     &self.buffer.0[..self.buffer.1]
+        //     // );
+        //     tokio::time::sleep(retry_duration).await;
+        //     n -= 1;
+        // }
         unreachable!()
     }
 
     pub async fn loop_sol_data(&mut self) -> Result<()> {
-        let mut stdin = tokio::io::stdin();
-        let send_buf = &mut [0u8; 64];
-        let mut recv_buf = Vec::with_capacity(1024);
-        loop {
-            if let Ok(Ok(i)) = timeout(Duration::from_secs(1), stdin.read(send_buf)).await {
-                println!("stdin -> {}", String::from_utf8_lossy(&send_buf[..i]));
-            } else {
-                println!("fuck debug timeout 1");
-            }
-            if let Ok(Ok(recv)) = timeout(
-                self.socket_recv_timeout,
-                self.client_socket.recv_buf(&mut recv_buf),
-            )
-            .await
-            {
-                println!("recv: {}", String::from_utf8_lossy(&recv_buf[0..recv]));
-            } else {
-                println!("fuck debug timeout 2");
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        // let mut recv_buf = Vec::with_capacity(1024);
+        // let buf: &mut [u8] = &mut [0u8; 255];
+        // loop {
+        //     let n = self.socket.recv(buf).await.unwrap();
+        //     let b = &buf[..n];
+        //     let packet = Packet::try_from((b, &self.session.k2)).unwrap();
+        //     println!("data : {:?}", packet);
+        //     if let PacketPayload::Sol(sol) = packet.data {
+        //         println!("resp ==>{:?}", String::from_utf8_lossy(&sol.data));
+        //     };
+        //
+        //     // tokio::time::sleep(Duration::from_millis(10)).await;
+        // }
+        todo!()
     }
 
-    pub async fn send_packet(&mut self, request_packet: &mut Packet) -> Result<Vec<u8>> {
-        request_packet.set_session_id(self.session.managed_id);
-        request_packet.set_session_seq_num(self.session.seq_number);
-        self.session.seq_number = self.session.seq_number.wrapping_add(1);
-        let packet_slice = self.encrypt_packet(request_packet);
-
-        self.client_socket
-            .send(&packet_slice)
-            .await
-            .map_err(EClient::FailedSend)?;
-
-        let mut buf = Vec::with_capacity(1024);
-        let n = timeout(
-            self.socket_recv_timeout,
-            self.client_socket.recv_buf(&mut buf),
-        )
-        .await??;
-        Ok(buf[..n].to_vec())
-    }
-
-    pub async fn send_raw_request(&mut self, data: &[u8]) -> Result<RespPayload> {
-        let send_data = if data.len() > 2 {
-            data[2..].to_vec()
-        } else {
-            Vec::new()
-        };
-
-        let mut raw_request: Packet =
-            IpmiRawRequest::new(data[0], data[1], send_data).create_packet();
-        let response = self.send_packet_retry(&mut raw_request).await?;
-        let packet: Packet = (response.as_slice(), &self.session.k2).try_into().unwrap();
-        let Payload::IpmiResp(payload) = packet.payload else {
-            info!("send raw request");
-            Err(EClient::NoResponse)?
-        };
-        Ok(payload)
+    pub async fn send_raw_request<'a>(&mut self) -> Result<IpmiRespPayload> {
+        // send_recv(&self.socket, &mut self.buffer.0, &mut self.buffer.1)
+        //     .await
+        //     .unwrap();
+        // let packet: Packet = Packet::from(
+        //     &self.session.k2,
+        //     &self.buffer.0[..self.buffer.1],
+        //     &self.session.k2,
+        // )
+        // .try_into()
+        // .unwrap();
+        // let PacketPayload::IpmiResp(payload) = packet.data else {
+        //     info!("send raw request");
+        //     Err(EClient::NoResponse)?
+        // };
+        // Ok(payload)
+        todo!()
     }
 
     pub async fn deactivated(&mut self) {
-        let cmd = CloseSessionCMD::new(self.session.managed_id);
-        let _ = self.send_packet(&mut cmd.gen_packet()).await;
+        // let cmd = CloseSessionCMD::new(self.session.managed_id);
+        // let _ = self.send_packet(&mut cmd.gen_packet()).await;
     }
 
     // bug: inspur and dell bmc sometimes response with different request commandcode,
     // when this situation happened, we need reconnect
     pub async fn re_connect(&mut self) -> Result<()> {
-        self.deactivated().await;
-        let addr = self.client_socket.peer_addr().unwrap();
-        warn!("reconnect: {}", addr);
-        *self = IPMIClient::new(addr, &self.username, &self.password)
-            .await?
-            .activate()
-            .await?;
+        // self.deactivated().await;
+        // let addr = self.socket.peer_addr().unwrap();
+        // warn!("reconnect: {}", addr);
+        // *self = IPMIClient::new(addr.to_string(), &self.username, &self.password)
+        //     .await?
+        //     .activate()
+        //     .await?;
         Ok(())
     }
 
-    #[allow(unused)]
-    async fn set_privilege_level(&mut self) -> Result<()> {
-        // Set session privilege level to ADMIN
-        let pri = &self.privilege;
-        if !matches!(pri, Privilege::Administrator) {
-            let mut set_session_req = IpmiRawRequest::new(
-                NetFn::App,
-                CommandCode::SetSessionPrivilegeLevel,
-                vec![Privilege::Administrator as u8],
-            )
-            .create_packet();
+    // #[allow(unused)]
+    // async fn set_privilege_level(&mut self) -> Result<()> {
+    //     // Set session privilege level to ADMIN
+    //     let pri = &self.privilege;
+    //     if !matches!(pri, Privilege::Administrator) {
+    //         let mut set_session_req = IpmiRawRequest::new(
+    //             None,
+    //             None,
+    //             NetFn::App,
+    //             CommandCode::SetSessionPrivilegeLevel,
+    //             vec![Privilege::Administrator as u8],
+    //         )
+    //         .create_packet();
+    //
+    //         let set_session_response: Packet = (
+    //             self.send_packet(&mut set_session_req).await?.as_slice(),
+    //             &self.session.k2,
+    //         )
+    //             .try_into()
+    //             .unwrap();
+    //         if let PacketData::IpmiResp(IpmiRespPayload {
+    //             completion_code: CompletionCode::CompletedNormally,
+    //             ..
+    //         }) = set_session_response.data
+    //         {
+    //             self.privilege = Privilege::Administrator;
+    //         }
+    //     }
+    //     Ok(())
+    // }
+}
+pub async fn send_packet<'a>(
+    socket: &UdpSocket,
+    conf: &ClientConfig,
+    buffer: &'a mut [u8],
+    len: &mut usize,
+    session: &mut SessionActived,
+    // request_packet: &mut Packet<'a>,
+) -> Result<&'a [u8]> {
+    // request_packet.set_session_id(session.managed_id);
+    // request_packet.set_session_seq_num(session.seq_number);
+    session.seq_number = session.seq_number.wrapping_add(1);
+    encrypt_packet(&session, (buffer, len));
 
-            let set_session_response: Packet = (
-                self.send_packet(&mut set_session_req).await?.as_slice(),
-                &self.session.k2,
-            )
-                .try_into()
-                .unwrap();
-            if let Payload::IpmiResp(RespPayload {
-                completion_code: CompletionCode::CompletedNormally,
-                ..
-            }) = set_session_response.payload
-            {
-                self.privilege = Privilege::Administrator;
-            }
-        }
-        Ok(())
-    }
+    socket
+        .send(&buffer[..*len])
+        .await
+        .map_err(EClient::FailedSend)?;
+
+    let mut buf: &mut [u8] = buffer;
+    let n = timeout(conf.socket_recv_timeout, socket.recv_buf(&mut buf)).await??;
+    Ok(&buf[..n])
+}
+fn encrypt_packet(session: &SessionActived, data: (&mut [u8], &mut usize)) {
+    aes_128_cbc_encrypt_new(data.0, data.1, session.k2[..16].try_into().unwrap());
+
+    // req_packet
+    //     .ipmi_session
+    //     .set_payload_len(encrypted_payload.len());
+    // let mut packet_vec: Vec<u8> = (&req_packet.rmcp_header).into();
+    // let mut session_payload_slice: Vec<u8> = req_packet.ipmi_session.into();
+    // session_payload_slice.extend(encrypted_payload);
+    // add_tailer(&mut session_payload_slice, session.k1);
+    // packet_vec.extend(session_payload_slice);
+    // packet_vec
+}
+pub async fn send_recv(socket: &UdpSocket, buf: &mut [u8], n: &mut usize) -> Result<()> {
+    socket.send(&buf[..*n]).await?;
+    *n = socket.recv(buf).await?;
+    Ok(())
 }

@@ -1,6 +1,9 @@
 use std::num::NonZeroU16;
 
-use crate::{request::ReqPayload, ECommand, ECommandCode, Error, IpmiCommand, Payload};
+use crate::{
+    commands::CommandCode, request::IpmiRequestPayload, ECommand, ECommandCode, Error, IpmiCommand,
+    NetFn, Packet, PacketPayload,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct GetAllocInfo;
@@ -17,21 +20,13 @@ pub struct AllocInfo {
 impl IpmiCommand for GetAllocInfo {
     type Output = AllocInfo;
 
-    fn netfn(&self) -> crate::NetFn {
-        crate::NetFn::Storage
-    }
+    const NET_FN: NetFn = NetFn::Storage;
+    const COMMAND: CommandCode = CommandCode::Raw(0x21);
 
-    fn command(&self) -> crate::commands::CommandCode {
-        crate::commands::CommandCode::Raw(0x21)
-    }
-
-    fn payload(&self) -> crate::Payload {
-        Payload::IpmiReq(ReqPayload::new(self.netfn(), self.command(), Vec::new()))
-    }
     fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
         if data.len() < 8 {
             Err(ECommand::NotEnoughData(ECommandCode::new(
-                self.command(),
+                Self::COMMAND,
                 8,
                 data.len(),
                 data.into(),
@@ -51,5 +46,14 @@ impl IpmiCommand for GetAllocInfo {
             largest_free_blk,
             max_record_size,
         })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Vec::new(),
+        ));
+        Packet::new_with_data(data).write_to(buf)
     }
 }

@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct RespPayload {
+pub struct IpmiRespPayload {
     pub rq_addr: Address,
     pub netfn_rqlun: NetfnLun,
     // checksum 1
@@ -16,7 +16,7 @@ pub struct RespPayload {
     // checksum 2
 }
 
-impl TryFrom<&[u8]> for RespPayload {
+impl TryFrom<&[u8]> for IpmiRespPayload {
     type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
@@ -25,7 +25,7 @@ impl TryFrom<&[u8]> for RespPayload {
         }
         let netfn_rqlun = NetfnLun::from(value[1]);
         let rqseq_rslun = NetfnLun::from(value[4]);
-        let ret = RespPayload {
+        let ret = IpmiRespPayload {
             rq_addr: value[0].into(),
             netfn_rqlun,
             rs_addr: value[3].into(),
@@ -46,7 +46,7 @@ impl TryFrom<&[u8]> for RespPayload {
     }
 }
 
-impl RespPayload {
+impl IpmiRespPayload {
     pub fn payload_length(&self) -> usize {
         if self.data.is_empty() {
             8

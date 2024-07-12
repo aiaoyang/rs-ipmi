@@ -9,7 +9,7 @@ use rust_ipmi::{
         GetSelEntry, GetSelInfo,
     },
     storage::sdr::{RecordId, SensorRecord},
-    IPMIClient, SessionActived,
+    ActiveClient, IPMIClient,
 };
 use tokio::time::sleep;
 
@@ -48,6 +48,7 @@ async fn main() -> Result<(), std::io::Error> {
         .await
         .unwrap();
     let mut c = client_inactived
+        .retry(1)
         .activate()
         .await
         .map_err(|e| println!("{e:?}"))
@@ -77,7 +78,7 @@ fn retain(v: &str) -> bool {
     RETAIN_SENSORS.contains(&v)
 }
 
-async fn get_sel(c: &mut IPMIClient<SessionActived>) {
+async fn get_sel(c: &mut ActiveClient) {
     let res = c.send_ipmi_cmd(&GetSelInfo).await.unwrap();
 
     let counter = 10;
@@ -102,7 +103,7 @@ async fn get_sel(c: &mut IPMIClient<SessionActived>) {
     }
 }
 
-async fn get_sdr<F: Fn(&str) -> bool>(c: &mut IPMIClient<SessionActived>, retain: F) {
+async fn get_sdr<F: Fn(&str) -> bool>(c: &mut ActiveClient, retain: F) {
     let sdr_repo_info = c.send_ipmi_cmd(&GetSDRRepositoryInfo).await.unwrap();
     println!("sdr repo info: {:?}", sdr_repo_info);
     let sdr_repo = c.send_ipmi_cmd(&GetReserveSDRRepository).await.unwrap();

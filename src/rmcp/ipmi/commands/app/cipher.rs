@@ -2,7 +2,8 @@ use crate::{
     commands::CommandCode,
     err::EIpmiPayload,
     rmcp::{
-        request::ReqPayload, IpmiHeader, IpmiV2Header, Packet, Payload, PayloadType, RmcpHeader,
+        request::IpmiRequestPayload, IpmiSession, IpmiV2Session, Packet, PacketPayload, RmcpHeader,
+        V2HeaderPayloadType,
     },
     NetFn,
 };
@@ -10,7 +11,7 @@ use crate::{
 #[derive(Clone)]
 pub struct GetChannelCipherSuitesRequest {
     pub channel_number: u8,
-    pub payload_type: PayloadType,
+    pub payload_type: V2HeaderPayloadType,
     pub list_algo_cipher_suite: bool,
     pub list_index: u8,
 }
@@ -28,7 +29,7 @@ impl From<GetChannelCipherSuitesRequest> for Vec<u8> {
 impl GetChannelCipherSuitesRequest {
     pub fn new(
         channel_number: u8,
-        payload_type: PayloadType,
+        payload_type: V2HeaderPayloadType,
         list_algo_cipher_suite: bool,
         list_index: u8,
     ) -> GetChannelCipherSuitesRequest {
@@ -40,16 +41,16 @@ impl GetChannelCipherSuitesRequest {
         }
     }
 
-    pub fn create_packet(self) -> Packet {
+    pub fn create_packet(self) -> Packet<'static> {
         let data_bytes: Vec<u8> = self.into();
 
         Packet::new(
             RmcpHeader::default(),
-            IpmiHeader::V2_0(IpmiV2Header::new_pre(
-                PayloadType::Ipmi,
+            IpmiSession::V2_0(IpmiV2Session::new_pre(
+                V2HeaderPayloadType::Ipmi,
                 ((data_bytes.len() as u8) + 7).into(),
             )),
-            Payload::IpmiReq(ReqPayload::new(
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(
                 NetFn::App,
                 CommandCode::GetChannelCipherSuites,
                 data_bytes,
@@ -62,7 +63,7 @@ impl Default for GetChannelCipherSuitesRequest {
     fn default() -> Self {
         GetChannelCipherSuitesRequest {
             channel_number: 0xe,
-            payload_type: PayloadType::Ipmi,
+            payload_type: V2HeaderPayloadType::Ipmi,
             list_algo_cipher_suite: true,
             list_index: 0x0,
         }

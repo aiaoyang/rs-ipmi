@@ -56,6 +56,16 @@ impl Default for RmcpHeader {
     }
 }
 
+impl RmcpHeader {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        buf[0] = self.version;
+        buf[1] = self.reserved;
+        buf[2] = self.sequence_number;
+        buf[3] = ((self.rmcp_ack as u8) << 6) | (u8::from(&self.message_class));
+        4
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum MessageClass {
     Asf,

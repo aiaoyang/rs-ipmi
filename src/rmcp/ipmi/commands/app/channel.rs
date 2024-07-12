@@ -4,7 +4,10 @@ use std::fmt::Debug;
 use crate::{
     commands::CommandCode,
     err::{ECommand, EIpmiPayload, EPacket},
-    rmcp::{request::ReqPayload, AuthType, IpmiHeader, IpmiV1Header, Packet, Payload, RmcpHeader},
+    rmcp::{
+        request::IpmiRequestPayload, AuthType, IpmiSession, IpmiV1Header, Packet, PacketPayload,
+        RmcpHeader,
+    },
     u8_ms_bit, ECommandCode, NetFn,
 };
 
@@ -37,18 +40,18 @@ impl GetChannelAuthCapabilitiesRequest {
         }
     }
 
-    pub fn create_packet(self) -> Packet {
+    pub fn create_packet(self) -> Packet<'static> {
         let data_bytes: Vec<u8> = self.into();
         Packet::new(
             RmcpHeader::default(),
-            IpmiHeader::V1_5(IpmiV1Header {
+            IpmiSession::V1_5(IpmiV1Header {
                 auth_type: AuthType::None,
                 session_seq_number: 0,
                 session_id: 0,
                 auth_code: None,
-                payload_length: (data_bytes.len() as u8) + 7,
+                payload_length: 7,
             }),
-            Payload::IpmiReq(ReqPayload::new(
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(
                 NetFn::App,
                 CommandCode::GetChannelAuthCapabilities,
                 data_bytes,
