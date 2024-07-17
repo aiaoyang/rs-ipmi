@@ -308,7 +308,13 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmi> {
     }
 }
 impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
-    pub fn write_payload<'a, T>(self, buf: &'a mut [u8], request: T, key: &[u8; 16]) -> &'a [u8]
+    pub fn write_payload<'a, T>(
+        self,
+        buf: &'a mut [u8],
+        request: T,
+        key: &[u8; 16],
+        k1: &[u8; 20],
+    ) -> &'a [u8]
     where
         T: IpmiCommand,
     {
@@ -319,8 +325,7 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
             true,
             true,
             V2HeaderPayloadType::Ipmi,
-            // self.session_id,
-            0x1a2b3c4d,
+            self.session_id,
             self.session_seq,
             0,
         );
@@ -332,11 +337,42 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
         println!("payload after: {payload_len}");
         session.set_payload_length(
             &mut buf[session_tail_idx - 2..session_tail_idx],
-            (payload_len - 16) as u16,
+            payload_len as u16,
         );
         n += payload_len;
+        n += add_tailer(buf, n, k1);
         &buf[..n]
     }
+}
+
+// Trailer's source is the session header and payload
+fn add_tailer(data: &mut [u8], mut len: usize, k1: &[u8; 20]) -> usize {
+    // Session Trailer (Table 13-8)
+    // +---------------+
+    // | Integrity PAD |  n bytes
+    // | Pad Length    |  1 byte
+    // | Next Header   |  1 byte  (0x07)
+    // | AuthCode      | 12 bytes
+    // +---------------+
+    let origin_len = len;
+    let m = (origin_len + 2 + 12) % 4;
+    let pad_len = if m != 0 { 4 - m } else { 0 };
+
+    for _ in 0..pad_len {
+        data[len] = 0xff;
+        len += 1;
+    }
+    data[len] = pad_len as u8;
+    len += 1;
+
+    // Next Header, Reserved in IPMI v2.0. Set to 07h for RMCP+ packets defined in this specification.
+    data[len] = 0x07;
+    len += 1;
+
+    let auth_code = hmac_sha1::hmac_sha1(k1, &data[..origin_len + pad_len + 2]);
+    data[len..len + 12].copy_from_slice(&auth_code[..12]);
+    len += 12;
+    len - origin_len
 }
 
 impl PacketBuilder<IpmiV1_5Packet, ()> {
@@ -402,28 +438,33 @@ impl PacketBuilder<(), ()> {
         }
     }
 
-    pub fn v2(session_id: u32, session_seq: u32) -> PacketBuilder<IpmiV2Packet, ()> {
-        PacketBuilder {
+    pub fn v2(session_id: u32, session_seq: &mut u32) -> PacketBuilder<IpmiV2Packet, ()> {
+        let ret = PacketBuilder {
             rmcp_header: RmcpHeader::default(),
             session: PhantomData,
             payload_type: PhantomData,
             session_id,
-            session_seq,
-        }
+            session_seq: *session_seq,
+        };
+        *session_seq = session_seq.wrapping_add(1);
+        ret
     }
 
     pub fn ipmi() -> PacketBuilder<IpmiV2Packet, PayloadTypeIpmi> {
-        Self::new_with(0, 0)
+        Self::new_with(0, &mut 0)
     }
 
     pub fn ipmi_encrypted(
         session_id: u32,
-        session_seq: u32,
+        session_seq: &mut u32,
     ) -> PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
         Self::new_with(session_id, session_seq)
     }
 
-    pub fn sol(session_id: u32, session_seq: u32) -> PacketBuilder<IpmiV2Packet, PayloadTypeSol> {
+    pub fn sol(
+        session_id: u32,
+        session_seq: &mut u32,
+    ) -> PacketBuilder<IpmiV2Packet, PayloadTypeSol> {
         Self::new_with(session_id, session_seq)
     }
 
@@ -438,14 +479,16 @@ impl PacketBuilder<(), ()> {
         Self::new()
     }
 
-    fn new_with<T, P>(session_id: u32, session_seq: u32) -> PacketBuilder<T, P> {
-        PacketBuilder {
+    fn new_with<T, P>(session_id: u32, session_seq: &mut u32) -> PacketBuilder<T, P> {
+        let ret = PacketBuilder {
             rmcp_header: RmcpHeader::default(),
             session_id,
-            session_seq,
+            session_seq: *session_seq,
             session: PhantomData,
             payload_type: PhantomData,
-        }
+        };
+        *session_seq = session_seq.wrapping_add(1);
+        ret
     }
 
     fn new<T, P>() -> PacketBuilder<T, P> {

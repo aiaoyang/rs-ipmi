@@ -536,11 +536,12 @@ impl ActiveClient {
 
     pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: CMD) -> Result<CMD::Output> {
         let packet =
-            PacketBuilder::ipmi_encrypted(self.session.managed_id, self.session.seq_number)
+            PacketBuilder::ipmi_encrypted(self.session.managed_id, &mut self.session.seq_number)
                 .write_payload(
                     &mut self.snd_buf,
                     ipmi_cmd,
                     &self.session.k2[..16].try_into().unwrap(),
+                    &self.session.k1,
                 );
         let resp = send_recv(
             &self.socket,
