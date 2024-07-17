@@ -69,10 +69,11 @@ impl IpmiCommand for GetRawSensorReading {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = &[self.sensor_number.get()];
         let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
             Self::NET_FN,
             Self::COMMAND,
-            vec![self.sensor_number.get()],
+            Some(d),
         ));
         Packet::new_with_data(data).write_to(buf)
     }

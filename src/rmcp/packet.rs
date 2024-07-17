@@ -1,10 +1,14 @@
+use std::marker::PhantomData;
+
 use crate::{
     commands::CommandCode,
-    crypto::aes_128_cbc_decrypt_new,
+    crypto::{aes_128_cbc_decrypt_new, aes_128_cbc_encrypt_new},
     err::{EPacket, Error},
+    open_session::RMCPPlusOpenSessionRequest,
+    rakp::{RAKPMessage1, RAKPMessage3},
     request::IpmiRequestPayload,
     rmcp::{IpmiSession, RmcpHeader, V2HeaderPayloadType},
-    CompletionCode, EIpmiPayload, IpmiV2Session,
+    AuthType, CompletionCode, EIpmiPayload, IpmiCommand, IpmiV1Session, IpmiV2Session,
 };
 
 use super::{
@@ -18,9 +22,9 @@ pub struct Packet<'a> {
     pub data: PacketPayload<'a>,
 }
 
-impl TryFrom<&[u8]> for Packet<'static> {
+impl<'a> TryFrom<&'a [u8]> for Packet<'a> {
     type Error = Error;
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         let len: usize = value.len();
         if len < 20 {
             Err(EPacket::WrongLength)?
@@ -28,8 +32,7 @@ impl TryFrom<&[u8]> for Packet<'static> {
         let ipmi_header_len = IpmiSession::header_len(value[4], value[5])?;
         let ipmi_header: IpmiSession = value[4..(ipmi_header_len + 4)].try_into()?;
         let payload_length = ipmi_header.payload_len();
-        let mut payload_vec = Vec::new();
-        payload_vec.extend_from_slice(&value[(len - payload_length)..len]);
+        let payload = &value[(len - payload_length)..len];
         Ok(Packet {
             rmcp_header: value[..4].try_into()?,
             ipmi_session: ipmi_header,
@@ -37,20 +40,16 @@ impl TryFrom<&[u8]> for Packet<'static> {
                 match payload_length {
                     0 => PacketPayload::None,
                     _ => match ipmi_header.payload_type() {
-                        V2HeaderPayloadType::Ipmi => {
-                            PacketPayload::IpmiResp(payload_vec.as_slice().try_into()?)
+                        V2HeaderPayloadType::Ipmi => PacketPayload::IpmiResp((payload).try_into()?),
+                        V2HeaderPayloadType::RmcpOpenSessionResponse => PacketPayload::Rmcp(
+                            RMCPPlusOpenSessionPayload::Response(payload.try_into()?),
+                        ),
+                        V2HeaderPayloadType::RAKP2 => {
+                            PacketPayload::Rakp(RakpPayload::Message2(payload.try_into()?))
                         }
-                        V2HeaderPayloadType::RmcpOpenSessionResponse => {
-                            PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Response(
-                                payload_vec.as_slice().try_into()?,
-                            ))
+                        V2HeaderPayloadType::RAKP4 => {
+                            PacketPayload::Rakp(RakpPayload::Message4(payload.try_into()?))
                         }
-                        V2HeaderPayloadType::RAKP2 => PacketPayload::Rakp(RakpPayload::Message2(
-                            payload_vec.as_slice().try_into()?,
-                        )),
-                        V2HeaderPayloadType::RAKP4 => PacketPayload::Rakp(RakpPayload::Message4(
-                            payload_vec.as_slice().try_into()?,
-                        )),
                         _ => unreachable!(),
                     },
                 }
@@ -131,7 +130,7 @@ pub type Data<'a> = &'a [u8];
 // }
 
 impl<'a> Packet<'a> {
-    pub fn decode_from(k2: &[u8; 20], data: &'a mut [u8], len: usize) -> Result<Packet<'a>, Error> {
+    pub fn decode_from(data: &'a mut [u8], k2: &[u8; 20], len: usize) -> Result<Packet<'a>, Error> {
         let len: usize = len;
         if len < 20 {
             Err(EPacket::WrongLength)?
@@ -252,12 +251,240 @@ impl<'a> Packet<'a> {
 
         write_byte
     }
+    pub fn encrypt_and_write_to(self, buf: &mut [u8], key: &[u8; 16]) -> usize {
+        let mut write_byte = 0;
+        write_byte += self.rmcp_header.write_to(&mut buf[write_byte..]);
+        write_byte += self.ipmi_session.write_to(&mut buf[write_byte..]);
+        write_byte += self.data.write_to(&mut buf[write_byte..]);
+        aes_128_cbc_encrypt_new(buf, &mut write_byte, key);
+
+        write_byte
+    }
 }
+
+pub struct IpmiV1_5Packet;
+pub struct IpmiV2Packet;
+pub struct RakpPacket;
+
+pub struct PayloadTypeRakp1;
+pub struct PayloadTypeRakp3;
+pub struct PayloadTypeIpmi;
+pub struct PayloadTypeIpmiEncrypted;
+pub struct PayloadTypeSol;
+pub struct PayloadTypeRmcpOpenSession;
+
+pub struct PacketBuilder<IpmiSession, PayloadType> {
+    rmcp_header: RmcpHeader,
+
+    session_id: u32,
+    session_seq: u32,
+
+    session: PhantomData<IpmiSession>,
+    payload_type: PhantomData<PayloadType>,
+}
+
+impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmi> {
+    pub fn write_payload<T>(self, buf: &mut [u8], request: T) -> &[u8]
+    where
+        T: IpmiCommand,
+    {
+        let mut n = self.rmcp_header.write_to(buf);
+
+        let session = IpmiV2Session::new(
+            AuthType::RmcpPlus,
+            false,
+            false,
+            V2HeaderPayloadType::Ipmi,
+            0,
+            0,
+            0,
+        );
+        n += session.write_to(&mut buf[n..]);
+        let tmp = n;
+        let payload_len = request.write_to(&mut buf[n..]);
+        n += payload_len;
+        session.set_payload_length(&mut buf[tmp - 2..tmp], payload_len as u16);
+        &buf[..n]
+    }
+}
+impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
+    pub fn write_payload<'a, T>(self, buf: &'a mut [u8], request: T, key: &[u8; 16]) -> &'a [u8]
+    where
+        T: IpmiCommand,
+    {
+        let mut n = self.rmcp_header.write_to(buf);
+
+        let session = IpmiV2Session::new(
+            AuthType::RmcpPlus,
+            true,
+            true,
+            V2HeaderPayloadType::Ipmi,
+            // self.session_id,
+            0x1a2b3c4d,
+            self.session_seq,
+            0,
+        );
+        n += session.write_to(&mut buf[n..]);
+        let session_tail_idx = n;
+        let mut payload_len = request.write_to(&mut buf[n..]);
+        println!("payload befor: {payload_len}");
+        aes_128_cbc_encrypt_new(&mut buf[session_tail_idx..], &mut payload_len, key);
+        println!("payload after: {payload_len}");
+        session.set_payload_length(
+            &mut buf[session_tail_idx - 2..session_tail_idx],
+            (payload_len - 16) as u16,
+        );
+        n += payload_len;
+        &buf[..n]
+    }
+}
+
+impl PacketBuilder<IpmiV1_5Packet, ()> {
+    pub fn write_payload<'a>(self, buf: &'a mut [u8], payload: PacketPayload<'_>) -> &'a [u8] {
+        let ipmi_v1_5_session = IpmiV1Session::default();
+        let mut n = self.rmcp_header.write_to(buf);
+        n += ipmi_v1_5_session.write_to(&mut buf[n..]);
+        n += payload.write_to(&mut buf[n..]);
+        &buf[..n]
+    }
+}
+
+impl PacketBuilder<RakpPacket, PayloadTypeRakp1> {
+    pub fn write_payload(self, buf: &mut [u8], message: RAKPMessage1) -> &[u8] {
+        let session = IpmiSession::V2_0(IpmiV2Session::new_pre(
+            V2HeaderPayloadType::RAKP1,
+            (message.username_length + 28).into(),
+        ));
+
+        let mut n = self.rmcp_header.write_to(buf);
+        n += session.write_to(&mut buf[n..]);
+        n += message.write_to(&mut buf[n..]);
+        &buf[..n]
+    }
+}
+impl PacketBuilder<RakpPacket, PayloadTypeRakp3> {
+    pub fn write_payload(self, buf: &mut [u8], message: RAKPMessage3) -> &[u8] {
+        let session = IpmiSession::V2_0(IpmiV2Session::new_pre(
+            V2HeaderPayloadType::RAKP3,
+            match &message.key_exchange_auth_code {
+                None => 8_u16,
+                Some(auth_code) => (auth_code.len() + 8) as u16,
+            },
+        ));
+        let mut n = self.rmcp_header.write_to(buf);
+        n += session.write_to(&mut buf[n..]);
+        n += message.write_to(&mut buf[n..]);
+        &buf[..n]
+    }
+}
+
+impl PacketBuilder<IpmiV2Packet, PayloadTypeRmcpOpenSession> {
+    pub fn write_payload(self, buf: &mut [u8], req: RMCPPlusOpenSessionRequest) -> &[u8] {
+        let session = IpmiSession::V2_0(IpmiV2Session::new_pre(
+            V2HeaderPayloadType::RmcpOpenSessionRequest,
+            29,
+        ));
+        let mut n = self.rmcp_header.write_to(buf);
+        n += session.write_to(&mut buf[n..]);
+        n += req.write_to(&mut buf[n..]);
+        &buf[..n]
+    }
+}
+
+impl PacketBuilder<(), ()> {
+    pub fn v1() -> PacketBuilder<IpmiV1_5Packet, ()> {
+        PacketBuilder {
+            rmcp_header: RmcpHeader::default(),
+            session: PhantomData,
+            payload_type: PhantomData,
+            session_id: 0,
+            session_seq: 0,
+        }
+    }
+
+    pub fn v2(session_id: u32, session_seq: u32) -> PacketBuilder<IpmiV2Packet, ()> {
+        PacketBuilder {
+            rmcp_header: RmcpHeader::default(),
+            session: PhantomData,
+            payload_type: PhantomData,
+            session_id,
+            session_seq,
+        }
+    }
+
+    pub fn ipmi() -> PacketBuilder<IpmiV2Packet, PayloadTypeIpmi> {
+        Self::new_with(0, 0)
+    }
+
+    pub fn ipmi_encrypted(
+        session_id: u32,
+        session_seq: u32,
+    ) -> PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
+        Self::new_with(session_id, session_seq)
+    }
+
+    pub fn sol(session_id: u32, session_seq: u32) -> PacketBuilder<IpmiV2Packet, PayloadTypeSol> {
+        Self::new_with(session_id, session_seq)
+    }
+
+    pub fn open_session() -> PacketBuilder<IpmiV2Packet, PayloadTypeRmcpOpenSession> {
+        Self::new()
+    }
+
+    pub fn rakp1() -> PacketBuilder<RakpPacket, PayloadTypeRakp1> {
+        Self::new()
+    }
+    pub fn rakp3() -> PacketBuilder<RakpPacket, PayloadTypeRakp3> {
+        Self::new()
+    }
+
+    fn new_with<T, P>(session_id: u32, session_seq: u32) -> PacketBuilder<T, P> {
+        PacketBuilder {
+            rmcp_header: RmcpHeader::default(),
+            session_id,
+            session_seq,
+            session: PhantomData,
+            payload_type: PhantomData,
+        }
+    }
+
+    fn new<T, P>() -> PacketBuilder<T, P> {
+        PacketBuilder {
+            rmcp_header: RmcpHeader::default(),
+            session_id: 0,
+            session_seq: 0,
+            session: PhantomData,
+            payload_type: PhantomData,
+        }
+    }
+
+    // pub fn with_payload(&mut self, payload: PacketPayload<'a>) {
+    //     match payload {
+    //         PacketPayload::IpmiReq(req) => todo!(),
+    //         PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Request(req)) => todo!(),
+    //         PacketPayload::Rakp(RakpPayload::Message1(req)) => todo!(),
+    //         PacketPayload::Rakp(RakpPayload::Message3(req)) => todo!(),
+    //         PacketPayload::Sol(_) => todo!(),
+    //         PacketPayload::Raw(_) => todo!(),
+    //         PacketPayload::None => todo!(),
+    //         _ => todo!(),
+    //     }
+    // }
+    //
+    // pub fn with_rmcp_header(&mut self, rmcp_header: RmcpHeader) {}
+    //
+    // pub fn with_ipmi_session(&mut self, ipmi_session: IpmiSession) {}
+    // pub fn build(self) -> Packet<'a> {
+    //     todo!()
+    // }
+}
+
+// impl<'a> PacketBuilder<'a, IpmiV1_5Packet> {}
 
 #[derive(Clone, Debug)]
 pub enum PacketPayload<'a> {
-    IpmiResp(IpmiRespPayload),
-    IpmiReq(IpmiRequestPayload),
+    IpmiResp(IpmiRespPayload<'a>),
+    IpmiReq(IpmiRequestPayload<'a>),
     Rmcp(RMCPPlusOpenSessionPayload),
     Rakp(RakpPayload),
     Sol(SolPayload),
@@ -265,47 +492,53 @@ pub enum PacketPayload<'a> {
     None,
 }
 
-impl<'a> From<&PacketPayload<'a>> for Vec<u8> {
-    fn from(val: &PacketPayload) -> Self {
-        match val {
-            PacketPayload::Rmcp(payload) => payload.into(),
-            PacketPayload::Rakp(payload) => payload.into(),
-            PacketPayload::IpmiResp(_) => unreachable!(),
-            PacketPayload::IpmiReq(payload) => {
-                let mut buf = [0_u8; 1024];
-                let n = payload.write_to(&mut buf);
-                buf[..n].to_vec()
-            }
-
-            PacketPayload::Sol(payload) => payload.into(),
-            PacketPayload::None => Vec::new(),
-            PacketPayload::Raw(raw) => raw.to_vec(),
-        }
-    }
-}
+// impl<'a> From<&PacketPayload<'a>> for Vec<u8> {
+//     fn from(val: &PacketPayload) -> Self {
+//         match val {
+//             PacketPayload::Rmcp(payload) => payload.into(),
+//             PacketPayload::Rakp(payload) => payload.into(),
+//             PacketPayload::IpmiResp(_) => unreachable!(),
+//             PacketPayload::IpmiReq(payload) => {
+//                 let mut buf = [0_u8; 1024];
+//                 let n = payload.write_to(&mut buf);
+//                 buf[..n].to_vec()
+//             }
+//
+//             PacketPayload::Sol(payload) => payload.into(),
+//             PacketPayload::None => Vec::new(),
+//             PacketPayload::Raw(raw) => raw.to_vec(),
+//         }
+//     }
+// }
 
 impl<'a> PacketPayload<'a> {
     pub fn write_to(self, buf: &mut [u8]) -> usize {
         match self {
             PacketPayload::IpmiResp(_) => unreachable!(),
             PacketPayload::IpmiReq(ipmi_req) => ipmi_req.write_to(buf),
-            PacketPayload::Rmcp(_) => todo!(),
-            PacketPayload::Rakp(_) => todo!(),
+            PacketPayload::Rmcp(rmcp) => rmcp.write_to(buf),
+            PacketPayload::Rakp(rakp) => rakp.write_to(buf),
             PacketPayload::Sol(_) => todo!(),
             PacketPayload::Raw(_) => todo!(),
             PacketPayload::None => todo!(),
         }
     }
-    pub fn data_and_completion(&self) -> (&[u8], CompletionCode) {
+    pub fn with_data(&mut self, data: &'a [u8]) {
+        match self {
+            PacketPayload::IpmiReq(ipmi_req) => ipmi_req.with_data(data),
+            _ => todo!(),
+        }
+    }
+    pub fn data_and_completion(&self) -> (Option<&[u8]>, CompletionCode) {
         if let PacketPayload::IpmiResp(IpmiRespPayload {
             data,
             completion_code,
             ..
         }) = self
         {
-            (data, *completion_code)
+            (data.clone(), *completion_code)
         } else {
-            (&[], CompletionCode::CompletedNormally)
+            (None, CompletionCode::CompletedNormally)
         }
     }
 
@@ -317,20 +550,6 @@ impl<'a> PacketPayload<'a> {
             _ => None,
         }
     }
-}
-
-#[test]
-fn test_packetpayload_new() {
-    let buf = &mut [0_u8; 1024];
-    let packet_payload = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-        crate::NetFn::App,
-        CommandCode::GetChannelCipherSuites,
-        Vec::new(),
-    ));
-
-    let payload: Vec<u8> = (&packet_payload).into();
-    let n = packet_payload.write_to(buf);
-    assert_eq!(&payload, &buf[..n]);
 }
 
 #[derive(Clone, Debug, Default)]

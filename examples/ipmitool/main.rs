@@ -42,7 +42,7 @@ async fn main() -> Result<(), std::io::Error> {
         .unwrap();
 
     let cmd = ActivatePayloadCommand { data: None };
-    let resp = client.send_ipmi_cmd(&cmd).await;
+    let resp = client.send_ipmi_cmd(cmd).await;
     match resp {
         Ok(_) => (),
         Err(e) => println!("ERROR: {e:#?}"),

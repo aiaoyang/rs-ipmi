@@ -5,21 +5,20 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct IpmiRequestPayload {
+pub struct IpmiRequestPayload<'a> {
     pub rs_addr: Address,
     pub netfn_rslun: NetfnLun,
     // checksum 1
     pub rq_addr: Address,
     pub rqseq_rqlun: NetfnLun,
     pub command: CommandCode,
-    pub data: Vec<u8>,
-    // checksum 2
+    pub data: &'a [u8], // checksum 2
 }
 
 const BMC_SLAVE_ADDRESS: u8 = 0x20;
 const REMOTE_SOFTWARE_ID: u8 = 0x81;
 
-impl Default for IpmiRequestPayload {
+impl<'a> Default for IpmiRequestPayload<'a> {
     fn default() -> Self {
         Self {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
@@ -27,12 +26,21 @@ impl Default for IpmiRequestPayload {
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
             rqseq_rqlun: NetfnLun::new(0x00, Lun::Bmc),
             command: CommandCode::GetChannelAuthCapabilities,
-            data: Vec::new(),
+            data: &[],
         }
     }
 }
 
-impl IpmiRequestPayload {
+impl<'a> IpmiRequestPayload<'a> {
+    pub fn with_data(&mut self, data: &'a [u8]) {
+        self.data = data;
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        self.data.len() + 7
+    }
+
     pub fn write_to(&self, buf: &mut [u8]) -> usize {
         let data_len = self.data.len();
 
@@ -43,19 +51,28 @@ impl IpmiRequestPayload {
         buf[4] = self.rqseq_rqlun.0;
         buf[5] = (self.command).into();
 
-        buf[6..6 + data_len].copy_from_slice(&self.data);
+        buf[6..6 + data_len].copy_from_slice(self.data);
         buf[6 + data_len] = checksum(&buf[3..6 + data_len]);
-        println!("buf: {:x?}", &buf);
         7 + data_len
     }
-    pub fn new(net_fn: NetFn, command: CommandCode, data: Vec<u8>) -> Self {
+    // pub fn new(net_fn: NetFn, command: CommandCode, data: Vec<u8>) -> Self {
+    //     Self {
+    //         rs_addr: Address::Slave(SlaveAddress::Bmc),
+    //         netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
+    //         rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
+    //         rqseq_rqlun: NetfnLun::new(0x08, Lun::Bmc),
+    //         command,
+    //         data,
+    //     }
+    // }
+    pub fn new(net_fn: NetFn, command: CommandCode, data: Option<&'a [u8]>) -> Self {
         Self {
             rs_addr: Address::Slave(SlaveAddress::Bmc),
             netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
             rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
             rqseq_rqlun: NetfnLun::new(0x08, Lun::Bmc),
             command,
-            data,
+            data: data.unwrap_or_default(),
         }
     }
 }

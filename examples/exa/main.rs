@@ -53,11 +53,12 @@ async fn main() -> Result<(), std::io::Error> {
         .await
         .map_err(|e| println!("{e:?}"))
         .unwrap();
-    if ev.contains(&"sel".into()) {
-        get_sel(&mut c).await;
-    } else {
-        get_sdr(&mut c, retain).await;
-    }
+    get_sel(&mut c).await;
+    // if ev.contains(&"sel".into()) {
+    //     get_sel(&mut c).await;
+    // } else {
+    //     get_sdr(&mut c, retain).await;
+    // }
     Ok(())
 }
 
@@ -79,12 +80,12 @@ fn retain(v: &str) -> bool {
 }
 
 async fn get_sel(c: &mut ActiveClient) {
-    let res = c.send_ipmi_cmd(&GetSelInfo).await.unwrap();
+    let res = c.send_ipmi_cmd(GetSelInfo).await.unwrap();
 
     let counter = 10;
 
     let first_offset_id = if res.entries > counter {
-        let first_record = c.send_ipmi_cmd(&GetSelEntry::new(0, 0, 0)).await.unwrap();
+        let first_record = c.send_ipmi_cmd(GetSelEntry::new(0, 0, 0)).await.unwrap();
         let delta = u16::from_le_bytes(first_record.next_record_id) - first_record.entry.id();
         (res.entries - counter + 1) * delta
     } else {
@@ -94,26 +95,23 @@ async fn get_sel(c: &mut ActiveClient) {
     let mut next = first_offset_id;
 
     while next != u16::from_le_bytes([0xff, 0xff]) {
-        let res = c
-            .send_ipmi_cmd(&GetSelEntry::new(0, next, 0))
-            .await
-            .unwrap();
+        let res = c.send_ipmi_cmd(GetSelEntry::new(0, next, 0)).await.unwrap();
         next = u16::from_le_bytes(res.next_record_id);
         println!("{:?}", res.entry.description_with_assetion(),);
     }
 }
 
 async fn get_sdr<F: Fn(&str) -> bool>(c: &mut ActiveClient, retain: F) {
-    let sdr_repo_info = c.send_ipmi_cmd(&GetSDRRepositoryInfo).await.unwrap();
+    let sdr_repo_info = c.send_ipmi_cmd(GetSDRRepositoryInfo).await.unwrap();
     println!("sdr repo info: {:?}", sdr_repo_info);
-    let sdr_repo = c.send_ipmi_cmd(&GetReserveSDRRepository).await.unwrap();
+    let sdr_repo = c.send_ipmi_cmd(GetReserveSDRRepository).await.unwrap();
     println!("reserv sdr repo info: {:?}", sdr_repo);
 
     let mut cmds = Vec::new();
     let mut next_id = RecordId::FIRST;
     while next_id != RecordId::LAST {
         let sdr_cmd = GetDeviceSdr::new(None, next_id);
-        let sdr_entry = c.send_ipmi_cmd(&sdr_cmd).await.unwrap();
+        let sdr_entry = c.send_ipmi_cmd(sdr_cmd).await.unwrap();
         next_id = sdr_entry.next_entry;
 
         if let Some(full) = sdr_entry.record.full_sensor() {
@@ -131,23 +129,21 @@ async fn get_sdr<F: Fn(&str) -> bool>(c: &mut ActiveClient, retain: F) {
         }
     }
 
-    loop {
-        for (full, cmd) in &cmds {
-            let value = c.send_ipmi_cmd(cmd).await.unwrap();
-            let Some(reading) = ThresholdReading::from(&value).reading else {
-                continue;
-            };
-            let Some(display) = full.h_value(reading) else {
-                continue;
-            };
-            println!(
-                "{} \t\t| {} \t| {:?}",
-                full.id_string(),
-                display,
-                full.common().event_reading_type_code
-            );
-        }
-        println!("\n\n\n\n");
-        sleep(Duration::from_secs(10)).await;
+    for (full, cmd) in cmds {
+        let value = c.send_ipmi_cmd(cmd).await.unwrap();
+        let Some(reading) = ThresholdReading::from(&value).reading else {
+            continue;
+        };
+        let Some(display) = full.h_value(reading) else {
+            continue;
+        };
+        println!(
+            "{} \t\t| {} \t| {:?}",
+            full.id_string(),
+            display,
+            full.common().event_reading_type_code
+        );
     }
+    println!("\n\n\n\n");
+    sleep(Duration::from_secs(10)).await;
 }

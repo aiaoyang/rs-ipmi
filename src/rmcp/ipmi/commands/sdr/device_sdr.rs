@@ -48,7 +48,7 @@ impl IpmiCommand for GetDeviceSdr {
     const COMMAND: CommandCode = CommandCode::Raw(0x23);
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let mut data = vec![0u8; 6];
+        let mut data = [0u8; 6];
 
         data[0..2].copy_from_slice(
             &self
@@ -62,8 +62,11 @@ impl IpmiCommand for GetDeviceSdr {
         data[4] = self.offset;
         data[5] = self.bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        let data =
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, data));
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Some(&data),
+        ));
         Packet::new_with_data(data).write_to(buf)
     }
 }

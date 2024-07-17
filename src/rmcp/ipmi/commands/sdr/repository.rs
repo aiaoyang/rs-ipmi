@@ -33,11 +33,8 @@ impl IpmiCommand for GetSDRRepositoryInfo {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Vec::new(),
-        ));
+        let data =
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None));
         Packet::new_with_data(data).write_to(buf)
     }
 }

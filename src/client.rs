@@ -21,7 +21,7 @@ use crate::{
         response::IpmiRespPayload,
         CompletionCode, Packet, PacketPayload,
     },
-    IpmiCommand,
+    IpmiCommand, PacketBuilder,
 };
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -78,15 +78,16 @@ pub struct SessionActived {
 /// default retry_duration is 300ms
 #[derive(Debug, Clone)]
 pub struct IPMIClient<SESSION: Clone, SOCKET, A: ToSocketAddrs = String> {
-    conf: ClientConfig<A>,
+    conf: ClientOption<A>,
     socket: SOCKET,
     pub(crate) session: SESSION,
 
-    buffer: ([u8; 1024], usize),
+    snd_buf: [u8; 1024],
+    recv_buf: [u8; 1024],
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ClientConfig<A: ToSocketAddrs = String> {
+pub(crate) struct ClientOption<A: ToSocketAddrs = String> {
     remote_addr: A,
     // privilege: Privilege,
     username: Box<str>,
@@ -138,7 +139,7 @@ impl InActiveClient {
         Ok(IPMIClient {
             socket: (),
             session: SessionInactived::default(),
-            conf: ClientConfig {
+            conf: ClientOption {
                 remote_addr: ipmi_server_addr,
                 username: Box::from(username),
                 password: Box::from(password),
@@ -149,7 +150,8 @@ impl InActiveClient {
                 retry_duration: Duration::from_millis(300),
                 auto_reconnect: false,
             },
-            buffer: ([0; 1024], 0),
+            snd_buf: [0; 1024],
+            recv_buf: [0; 1024],
         })
     }
 
@@ -230,15 +232,19 @@ impl InActiveClient {
     }
 
     async fn get_channel_auth_cap(&mut self, socket: &UdpSocket) -> Result<()> {
+        println!("get_channel_auth_cap");
+
         let get_channel_auth_cap_packet =
-            GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator)
-                .create_packet();
+            GetChannelAuthCapabilitiesRequest::new(true, 0xE, Privilege::Administrator);
+        let packet =
+            PacketBuilder::ipmi().write_payload(&mut self.snd_buf, get_channel_auth_cap_packet);
+
         Self::send_unauth_packet_retry(
             socket,
             &mut self.session,
-            get_channel_auth_cap_packet,
+            packet,
             &self.conf,
-            &mut self.buffer.0,
+            &mut self.recv_buf,
         )
         .await?;
 
@@ -298,25 +304,27 @@ impl InActiveClient {
     }
 
     async fn rmcpplus_session_authenticate(mut self, socket: UdpSocket) -> Result<ActiveClient> {
+        println!("session authenticate");
         // RMCP+ Open Session Request
-        let rmcp_plus_open_session_packet: Packet = RMCPPlusOpenSessionRequest::new(
+        let rmcp_plus_open_session_req = RMCPPlusOpenSessionRequest::new(
             0,
             Privilege::Administrator,
             0xa0a2a3a4,
             AuthAlgorithm::RakpHmacSha1,
             IntegrityAlgorithm::HmacSha196,
             ConfidentialityAlgorithm::AesCbc128,
-        )
-        .into();
-        let osr = Self::send_unauth_packet_retry(
+        );
+        let packet = PacketBuilder::open_session()
+            .write_payload(&mut self.snd_buf, rmcp_plus_open_session_req);
+        let resp = Self::send_unauth_packet_retry(
             &socket,
             &mut self.session,
-            rmcp_plus_open_session_packet,
+            packet,
             &self.conf,
-            &mut self.buffer.0,
+            &mut self.recv_buf,
         )
         .await?;
-        let PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Response(msg)) = osr.data else {
+        let PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Response(msg)) = resp.data else {
             Err(EClient::MisformedResponse)?
         };
 
@@ -334,15 +342,16 @@ impl InActiveClient {
             Privilege::Administrator,
             self.conf.username.to_string(),
         );
-        let rakp1_packet: Packet = rk1.into();
+        let packet = PacketBuilder::rakp1().write_payload(&mut self.snd_buf, rk1);
 
         // RAKP Message 2
+        println!("send rakp1");
         let r2_pkt = Self::send_unauth_packet_retry(
             &socket,
             &mut self.session,
-            rakp1_packet,
+            packet,
             &self.conf,
-            &mut self.buffer.0,
+            &mut self.recv_buf,
         )
         .await?;
         let PacketPayload::Rakp(RakpPayload::Message2(msg2)) = &r2_pkt.data else {
@@ -371,21 +380,22 @@ impl InActiveClient {
         self.create_session_keys()?;
 
         // RAKP Message 3
-        let rakp3_packet: Packet = RAKPMessage3::new(
+        let rakp3_packet = RAKPMessage3::new(
             0x0,
             StatusCode::NoErrors,
             self.session.managed_id.unwrap(),
             Some(self.gen_rk3_auth_code().into()),
-        )
-        .into();
+        );
+        let packet = PacketBuilder::rakp3().write_payload(&mut self.snd_buf, rakp3_packet);
 
         // RAKP Message 4
+        println!("send rakp3");
         let r4_pkt = Self::send_unauth_packet_retry(
             &socket,
             &mut self.session,
-            rakp3_packet,
+            packet,
             &self.conf,
-            &mut self.buffer.0,
+            &mut self.recv_buf,
         )
         .await?;
 
@@ -412,63 +422,60 @@ impl InActiveClient {
                 k1: self.session.k1.unwrap(),
                 k2: self.session.k2.unwrap(),
             },
-            buffer: self.buffer,
+            snd_buf: self.snd_buf,
+            recv_buf: self.recv_buf,
         })
         // Ok(IPMIClient::from(self))
     }
 
-    async fn send_unauth_packet<'a>(
-        socket: &UdpSocket,
-        session: &mut SessionInactived,
-        request_packet: Packet<'a>,
-        buf: &'a mut [u8],
-    ) -> Result<Packet<'a>> {
-        let x = request_packet.write_to(buf);
-        socket.send(&buf[..x]).await.map_err(EClient::FailedSend)?;
-        let Ok((n_bytes, _)) = socket.recv_from(buf).await else {
-            info!("send_unauth_packet");
-            Err(EClient::NoResponse)?
-        };
-
-        match session.k2 {
-            Some(k2) => Ok(Packet::decode_from(&k2, &mut buf[..n_bytes], n_bytes)?),
-            None => Ok(Packet::try_from(&buf[..n_bytes])?),
-        }
-    }
+    // async fn send_unauth_packet<'a>(
+    //     socket: &UdpSocket,
+    //     session: &mut SessionInactived,
+    //     request_packet: Packet<'a>,
+    //     buf: &'a mut [u8],
+    // ) -> Result<Packet<'a>> {
+    //     let x = request_packet.write_to(buf);
+    //     socket.send(&buf[..x]).await.map_err(EClient::FailedSend)?;
+    //     let Ok((n_bytes, _)) = socket.recv_from(buf).await else {
+    //         info!("send_unauth_packet");
+    //         Err(EClient::NoResponse)?
+    //     };
+    //
+    //     match session.k2 {
+    //         Some(k2) => Ok(Packet::decode_from(buf, &k2, n_bytes)?),
+    //         None => Ok(Packet::try_from(&buf[..n_bytes])?),
+    //     }
+    // }
 
     async fn send_unauth_packet_retry<'a>(
         socket: &UdpSocket,
         session: &mut SessionInactived,
-        request_packet: Packet<'a>,
-        conf: &ClientConfig,
-        buf: &'a mut [u8],
+        request_packet: &[u8],
+        conf: &ClientOption,
+        recv_buf: &'a mut [u8],
     ) -> Result<Packet<'a>> {
         let mut retry: i32 = conf.retry as i32;
-        let duration = conf.retry_duration;
-        let n = request_packet.write_to(buf);
-        println!("fuck");
-        println!("packet: {:x?}", &buf[..n]);
+        // println!("packet: {:x?}", &buf[..n]);
 
         while retry >= 0 {
-            let packet = &buf[..n];
-            socket.send(packet).await.map_err(EClient::FailedSend)?;
-            let Ok(Ok((n_bytes, _))) = timeout(Duration::from_secs(1), socket.recv_from(buf)).await
+            let Ok(n_bytes) =
+                send_recv(socket, request_packet, recv_buf, conf.socket_recv_timeout).await
             else {
                 if retry <= 0 {
-                    info!("send_unauth_packet");
+                    // info!("send_unauth_packet");
                     Err(EClient::NoResponse)?
                 } else {
-                    tokio::time::sleep(duration).await;
+                    tokio::time::sleep(conf.retry_duration).await;
                     retry -= 1;
-                    warn!("retry packet");
+                    // warn!("retry packet");
                     continue;
                 }
             };
 
             if let Some(k2) = session.k2 {
-                return Packet::decode_from(&k2, &mut buf[..n_bytes], n_bytes);
+                return Packet::decode_from(recv_buf, &k2, n_bytes);
             } else {
-                return Packet::try_from(&buf[..n_bytes]);
+                return Packet::try_from(&recv_buf[..n_bytes]);
             };
         }
         Err(EClient::NoResponse)?
@@ -527,7 +534,22 @@ impl ActiveClient {
         self.socket.recv(buf).await
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: &CMD) -> Result<CMD::Output> {
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: CMD) -> Result<CMD::Output> {
+        let packet =
+            PacketBuilder::ipmi_encrypted(self.session.managed_id, self.session.seq_number)
+                .write_payload(
+                    &mut self.snd_buf,
+                    ipmi_cmd,
+                    &self.session.k2[..16].try_into().unwrap(),
+                );
+        let resp = send_recv(
+            &self.socket,
+            packet,
+            &mut self.recv_buf,
+            Duration::from_secs(1),
+        )
+        .await?;
+
         // self.buffer.1 = ipmi_cmd.write_to(&mut self.buffer.0);
         //
         // let resp = match self.send_and_decrypt_packet(&mut packet).await {
@@ -685,28 +707,41 @@ impl ActiveClient {
     //     Ok(())
     // }
 }
-pub async fn send_packet<'a>(
-    socket: &UdpSocket,
-    conf: &ClientConfig,
-    buffer: &'a mut [u8],
-    len: &mut usize,
-    session: &mut SessionActived,
-    // request_packet: &mut Packet<'a>,
-) -> Result<&'a [u8]> {
-    // request_packet.set_session_id(session.managed_id);
-    // request_packet.set_session_seq_num(session.seq_number);
-    session.seq_number = session.seq_number.wrapping_add(1);
-    encrypt_packet(&session, (buffer, len));
 
-    socket
-        .send(&buffer[..*len])
-        .await
+// pub async fn send_packet<'a>(
+//     socket: &UdpSocket,
+//     buffer: &'a mut [u8],
+//     packet: Packet<'a>,
+//     opt: &ClientOption,
+//     session: &mut SessionActived,
+// ) -> Result<Packet<'a>> {
+//     let mut n = packet.write_to(buffer);
+//     // request_packet.set_session_id(session.managed_id);
+//     // request_packet.set_session_seq_num(session.seq_number);
+//     session.seq_number = session.seq_number.wrapping_add(1);
+//     encrypt_packet(session, (buffer, &mut n));
+//
+//     let n = send_recv(socket, buffer, n, opt.socket_recv_timeout).await?;
+//     let resp_packet = Packet::decode_from(buffer, &session.k2, n)?;
+//     Ok(resp_packet)
+// }
+
+pub async fn send_recv(
+    socket: &UdpSocket,
+    snd: &[u8],
+    mut recv_buf: &mut [u8],
+    timeout: Duration,
+) -> Result<usize> {
+    tokio::time::timeout(timeout, socket.send(&snd))
+        .await?
         .map_err(EClient::FailedSend)?;
 
-    let mut buf: &mut [u8] = buffer;
-    let n = timeout(conf.socket_recv_timeout, socket.recv_buf(&mut buf)).await??;
-    Ok(&buf[..n])
+    let n = tokio::time::timeout(timeout, socket.recv_buf(&mut recv_buf))
+        .await?
+        .map_err(EClient::FailedSetSocketReadTimeout)?;
+    Ok(n)
 }
+
 fn encrypt_packet(session: &SessionActived, data: (&mut [u8], &mut usize)) {
     aes_128_cbc_encrypt_new(data.0, data.1, session.k2[..16].try_into().unwrap());
 
@@ -719,9 +754,4 @@ fn encrypt_packet(session: &SessionActived, data: (&mut [u8], &mut usize)) {
     // add_tailer(&mut session_payload_slice, session.k1);
     // packet_vec.extend(session_payload_slice);
     // packet_vec
-}
-pub async fn send_recv(socket: &UdpSocket, buf: &mut [u8], n: &mut usize) -> Result<()> {
-    socket.send(&buf[..*n]).await?;
-    *n = socket.recv(buf).await?;
-    Ok(())
 }

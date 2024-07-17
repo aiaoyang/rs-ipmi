@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct IpmiV1Header {
+pub struct IpmiV1Session {
     pub auth_type: AuthType,
     pub session_seq_number: u32,
     pub session_id: u32,
@@ -12,7 +12,7 @@ pub struct IpmiV1Header {
     pub payload_length: u8,
 }
 
-impl TryFrom<&[u8]> for IpmiV1Header {
+impl TryFrom<&[u8]> for IpmiV1Session {
     type Error = EIpmiHeader;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
@@ -38,7 +38,7 @@ impl TryFrom<&[u8]> for IpmiV1Header {
             }
         };
 
-        Ok(IpmiV1Header {
+        Ok(IpmiV1Session {
             auth_type: value[0].try_into()?,
             session_seq_number: u32::from_be_bytes([value[1], value[2], value[3], value[4]]),
             session_id: u32::from_be_bytes([value[5], value[6], value[7], value[8]]),
@@ -48,8 +48,8 @@ impl TryFrom<&[u8]> for IpmiV1Header {
     }
 }
 
-impl From<&IpmiV1Header> for Vec<u8> {
-    fn from(val: &IpmiV1Header) -> Self {
+impl From<&IpmiV1Session> for Vec<u8> {
+    fn from(val: &IpmiV1Session) -> Self {
         let seq_be = val.session_seq_number.to_be_bytes();
         let ses_be = val.session_id.to_be_bytes();
         let mut result: Vec<u8> = Vec::new();
@@ -71,7 +71,7 @@ impl From<&IpmiV1Header> for Vec<u8> {
     }
 }
 
-impl Default for IpmiV1Header {
+impl Default for IpmiV1Session {
     fn default() -> Self {
         Self {
             auth_type: AuthType::None,
@@ -83,7 +83,7 @@ impl Default for IpmiV1Header {
     }
 }
 
-impl IpmiV1Header {
+impl IpmiV1Session {
     pub fn write_to(self, buf: &mut [u8]) -> usize {
         let seq_be = self.session_seq_number.to_be_bytes();
         let ses_be = self.session_id.to_be_bytes();
@@ -93,7 +93,7 @@ impl IpmiV1Header {
         match self.auth_type {
             AuthType::None => {
                 buf[9] = self.payload_length;
-                9
+                10
             }
             _ => {
                 let auth_be = self.auth_code.unwrap().to_be_bytes();
@@ -108,7 +108,7 @@ impl IpmiV1Header {
 #[test]
 fn test_old() {
     let buf = &mut [0_u8; 1024];
-    let h = IpmiV1Header {
+    let h = IpmiV1Session {
         auth_type: AuthType::MD5,
         session_seq_number: 0,
         session_id: 0,

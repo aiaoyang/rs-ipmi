@@ -34,6 +34,11 @@ pub trait IpmiCommand {
     fn write_to(&self, buf: &mut [u8]) -> usize;
 }
 
+pub trait BufWriter {
+    fn write_to(self, buf: &mut [u8]) -> usize;
+    fn encrypt_write(self, buf: &mut [u8], key: &[u8; 16]) -> usize;
+}
+
 #[derive(Clone, Debug, Copy)]
 pub enum CompletionCode {
     CompletedNormally,

@@ -1,12 +1,4 @@
-use crate::{
-    commands::CommandCode,
-    err::EIpmiPayload,
-    rmcp::{
-        request::IpmiRequestPayload, IpmiSession, IpmiV2Session, Packet, PacketPayload, RmcpHeader,
-        V2HeaderPayloadType,
-    },
-    NetFn,
-};
+use crate::{err::EIpmiPayload, rmcp::V2HeaderPayloadType};
 
 #[derive(Clone)]
 pub struct GetChannelCipherSuitesRequest {
@@ -41,22 +33,26 @@ impl GetChannelCipherSuitesRequest {
         }
     }
 
-    pub fn create_packet(self) -> Packet<'static> {
-        let data_bytes: Vec<u8> = self.into();
-
-        Packet::new(
-            RmcpHeader::default(),
-            IpmiSession::V2_0(IpmiV2Session::new_pre(
-                V2HeaderPayloadType::Ipmi,
-                ((data_bytes.len() as u8) + 7).into(),
-            )),
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(
-                NetFn::App,
-                CommandCode::GetChannelCipherSuites,
-                data_bytes,
-            )),
-        )
-    }
+    // pub fn create_packet(self) -> Packet<'static> {
+    //     let data_bytes = [
+    //         (self.channel_number << 4 >> 4),
+    //         (std::convert::Into::<u8>::into(self.payload_type) << 3 >> 3),
+    //         (((self.list_algo_cipher_suite as u8) << 7) | (self.list_index & 0x3f)),
+    //     ];
+    //
+    //     Packet::new(
+    //         RmcpHeader::default(),
+    //         IpmiSession::V2_0(IpmiV2Session::new_pre(
+    //             V2HeaderPayloadType::Ipmi,
+    //             (data_bytes.len() as u16) + 7,
+    //         )),
+    //         PacketPayload::IpmiReq(IpmiRequestPayload::new(
+    //             NetFn::App,
+    //             CommandCode::GetChannelCipherSuites,
+    //             &data_bytes,
+    //         )),
+    //     )
+    // }
 }
 
 impl Default for GetChannelCipherSuitesRequest {

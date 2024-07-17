@@ -66,11 +66,8 @@ impl IpmiCommand for GetChassisStatus {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Vec::new(),
-        ));
+        let data =
+            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None));
         Packet::new_with_data(data).write_to(buf)
     }
 }
@@ -93,10 +90,11 @@ impl IpmiCommand for ChassisControl {
         Ok(())
     }
     fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = &[*self as u8];
         let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
             Self::NET_FN,
             Self::COMMAND,
-            Vec::from(&[*self as u8]),
+            Some(d),
         ));
         Packet::new_with_data(data).write_to(buf)
     }

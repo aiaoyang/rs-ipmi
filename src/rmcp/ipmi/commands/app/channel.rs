@@ -1,14 +1,10 @@
-// use crate::ipmi::data::data::Data;
 use std::fmt::Debug;
 
 use crate::{
     commands::CommandCode,
     err::{ECommand, EIpmiPayload, EPacket},
-    rmcp::{
-        request::IpmiRequestPayload, AuthType, IpmiSession, IpmiV1Header, Packet, PacketPayload,
-        RmcpHeader,
-    },
-    u8_ms_bit, ECommandCode, NetFn,
+    rmcp::{request::IpmiRequestPayload, AuthType, PacketPayload},
+    u8_ms_bit, ECommandCode, IpmiCommand, NetFn,
 };
 
 #[derive(Clone)]
@@ -18,14 +14,14 @@ pub struct GetChannelAuthCapabilitiesRequest {
     pub max_privilege: Privilege,
 }
 
-impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
-    fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
-        vec![
-            ((val.channel_version as u8) << 7 | val.channel_number & 0x0f),
-            val.max_privilege as u8,
-        ]
-    }
-}
+// impl From<GetChannelAuthCapabilitiesRequest> for Vec<u8> {
+//     fn from(val: GetChannelAuthCapabilitiesRequest) -> Self {
+//         vec![
+//             ((val.channel_version as u8) << 7 | val.channel_number & 0x0f),
+//             val.max_privilege as u8,
+//         ]
+//     }
+// }
 
 impl GetChannelAuthCapabilitiesRequest {
     pub fn new(
@@ -39,24 +35,108 @@ impl GetChannelAuthCapabilitiesRequest {
             max_privilege,
         }
     }
+    // fn write_to(&self, buf: &mut [u8]) -> usize {
+    //     let d = [
+    //         (self.channel_version as u8) << 7 | self.channel_number,
+    //         self.max_privilege as u8,
+    //     ];
+    //     let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+    //         NetFn::App,
+    //         CommandCode::GetChannelAuthCapabilities,
+    //         Some(&d),
+    //     ));
+    //     data.write_to(buf)
+    // }
 
-    pub fn create_packet(self) -> Packet<'static> {
-        let data_bytes: Vec<u8> = self.into();
-        Packet::new(
-            RmcpHeader::default(),
-            IpmiSession::V1_5(IpmiV1Header {
-                auth_type: AuthType::None,
-                session_seq_number: 0,
-                session_id: 0,
-                auth_code: None,
-                payload_length: 7,
-            }),
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(
-                NetFn::App,
+    // pub fn write_to(self, buf: &mut [u8]) -> usize {
+    //     buf[0] = (self.channel_version as u8) << 7 | self.channel_number & 0x0f;
+    //     buf[1] = self.max_privilege as u8;
+    //     2
+    // }
+
+    // pub fn create_packet(self) -> Packet<'static> {
+    //     let data_bytes: Vec<u8> = self.into();
+    //     Packet::new(
+    //         RmcpHeader::default(),
+    //         IpmiSession::V1_5(IpmiV1Header {
+    //             auth_type: AuthType::None,
+    //             session_seq_number: 0,
+    //             session_id: 0,
+    //             auth_code: None,
+    //             payload_length: 7 + data_bytes.len() as u8,
+    //         }),
+    //         PacketPayload::IpmiReq(IpmiRequestPayload::new(
+    //             NetFn::App,
+    //             CommandCode::GetChannelAuthCapabilities,
+    //             data_bytes,
+    //         )),
+    //     )
+    // }
+}
+
+impl IpmiCommand for GetChannelAuthCapabilitiesRequest {
+    type Output = GetChannelAuthCapabilitiesResponse;
+
+    const NET_FN: NetFn = NetFn::App;
+
+    const COMMAND: CommandCode = CommandCode::GetChannelAuthCapabilities;
+
+    fn parse(&self, data: &[u8]) -> Result<Self::Output, Error> {
+        if data.len() != 8 {
+            Err(ECommand::NotEnoughData(ECommandCode::new(
                 CommandCode::GetChannelAuthCapabilities,
-                data_bytes,
-            )),
-        )
+                8,
+                data.len(),
+                data.into(),
+            )))?
+        }
+        Ok(GetChannelAuthCapabilitiesResponse {
+            channel_number: data[0],
+            auth_version: u8_ms_bit(data[1], 0).into(),
+            auth_type: {
+                let mut result: Vec<AuthType> = vec![];
+                if u8_ms_bit(data[1], 2) {
+                    result.push(AuthType::Oem)
+                }
+                if u8_ms_bit(data[1], 3) {
+                    result.push(AuthType::PasswordOrKey)
+                }
+                if u8_ms_bit(data[1], 5) {
+                    result.push(AuthType::MD5)
+                }
+                if u8_ms_bit(data[1], 6) {
+                    result.push(AuthType::MD2)
+                }
+                if u8_ms_bit(data[1], 7) {
+                    result.push(AuthType::None)
+                }
+                result
+            },
+            kg_status: u8_ms_bit(data[2], 2).into(),
+            per_message_auth: u8_ms_bit(data[2], 3),
+            user_level_auth: !u8_ms_bit(data[2], 4),
+            anon_login: AnonLogin::new(
+                u8_ms_bit(data[2], 5).into(),
+                u8_ms_bit(data[2], 6).into(),
+                u8_ms_bit(data[2], 7).into(),
+            ),
+            channel_extended_cap: u8_ms_bit(data[3], 6).into(),
+            oem_id: u32::from_le_bytes([0, data[4], data[5], data[6]]),
+            oem_aux_data: data[7],
+        })
+    }
+
+    fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = [
+            (self.channel_version as u8) << 7 | self.channel_number,
+            self.max_privilege as u8,
+        ];
+        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
+            Self::NET_FN,
+            Self::COMMAND,
+            Some(&d),
+        ));
+        data.write_to(buf)
     }
 }
 
@@ -74,54 +154,13 @@ pub struct GetChannelAuthCapabilitiesResponse {
     pub oem_aux_data: u8,
 }
 
-impl TryFrom<&[u8]> for GetChannelAuthCapabilitiesResponse {
-    type Error = Error;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() != 8 {
-            Err(ECommand::NotEnoughData(ECommandCode::new(
-                CommandCode::GetChannelAuthCapabilities,
-                8,
-                value.len(),
-                value.into(),
-            )))?
-        }
-        Ok(GetChannelAuthCapabilitiesResponse {
-            channel_number: value[0],
-            auth_version: u8_ms_bit(value[1], 0).into(),
-            auth_type: {
-                let mut result: Vec<AuthType> = vec![];
-                if u8_ms_bit(value[1], 2) {
-                    result.push(AuthType::Oem)
-                }
-                if u8_ms_bit(value[1], 3) {
-                    result.push(AuthType::PasswordOrKey)
-                }
-                if u8_ms_bit(value[1], 5) {
-                    result.push(AuthType::MD5)
-                }
-                if u8_ms_bit(value[1], 6) {
-                    result.push(AuthType::MD2)
-                }
-                if u8_ms_bit(value[1], 7) {
-                    result.push(AuthType::None)
-                }
-                result
-            },
-            kg_status: u8_ms_bit(value[2], 2).into(),
-            per_message_auth: u8_ms_bit(value[2], 3),
-            user_level_auth: !u8_ms_bit(value[2], 4),
-            anon_login: AnonLogin::new(
-                u8_ms_bit(value[2], 5).into(),
-                u8_ms_bit(value[2], 6).into(),
-                u8_ms_bit(value[2], 7).into(),
-            ),
-            channel_extended_cap: u8_ms_bit(value[3], 6).into(),
-            oem_id: u32::from_le_bytes([0, value[4], value[5], value[6]]),
-            oem_aux_data: value[7],
-        })
-    }
-}
+// #[test]
+// fn test_get_auth() {
+//     let buf = &mut [0_u8; 40];
+//     let cmd = GetChannelAuthCapabilitiesRequest::new(false, 0xE, Privilege::Administrator);
+//     let n = cmd.create_packet().write_to(buf);
+//     println!("packet: {:x?}", &buf[..n]);
+// }
 
 #[derive(Debug)]
 
@@ -231,16 +270,3 @@ impl TryFrom<u8> for Privilege {
         }
     }
 }
-
-// impl From<Privilege> for u8 {
-//     fn from(val: Privilege) -> Self {
-//         match val {
-//             Privilege::Reserved => 0x00,
-//             Privilege::Callback => 0x01,
-//             Privilege::User => 0x02,
-//             Privilege::Operator => 0x03,
-//             Privilege::Administrator => 0x04,
-//             Privilege::Oem => 0x05,
-//         }
-//     }
-// }

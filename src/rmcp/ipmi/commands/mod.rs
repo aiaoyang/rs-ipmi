@@ -80,15 +80,16 @@ impl IpmiCommand for CloseSessionCMD {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = &[
+            self.0 as u8,
+            (self.0 >> 8) as u8,
+            (self.0 >> 16) as u8,
+            (self.0 >> 24) as u8,
+        ];
         let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
             Self::NET_FN,
             Self::COMMAND,
-            vec![
-                self.0 as u8,
-                (self.0 >> 8) as u8,
-                (self.0 >> 16) as u8,
-                (self.0 >> 24) as u8,
-            ],
+            Some(d),
         ));
 
         Packet::new_with_data(data).write_to(buf)

@@ -36,10 +36,11 @@ impl IpmiCommand for ChassisControl {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = &[self.to_u8()];
         let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
             Self::NET_FN,
             Self::COMMAND,
-            Vec::from(&[self.to_u8()]),
+            Some(d),
         ));
         Packet::new_with_data(data).write_to(buf)
     }

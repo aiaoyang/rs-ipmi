@@ -2,7 +2,7 @@ use crate::{
     commands::{CommandCode, Privilege},
     err::{ECommand, Error},
     rmcp::{IpmiSession, IpmiV2Session, Packet, PacketPayload, RmcpHeader, V2HeaderPayloadType},
-    ECommandCode,
+    ECommandCode, PacketBuilder,
 };
 
 #[derive(Clone, Debug)]
@@ -12,14 +12,23 @@ pub enum RMCPPlusOpenSessionPayload {
     Response(RMCPPlusOpenSessionResponse),
 }
 
-impl From<&RMCPPlusOpenSessionPayload> for Vec<u8> {
-    fn from(val: &RMCPPlusOpenSessionPayload) -> Self {
-        match val {
-            RMCPPlusOpenSessionPayload::Request(request) => request.clone().into(),
-            _ => todo!(),
+impl RMCPPlusOpenSessionPayload {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        match self {
+            RMCPPlusOpenSessionPayload::Request(req) => req.write_to(buf),
+            RMCPPlusOpenSessionPayload::Response(_) => unreachable!(),
         }
     }
 }
+
+// impl From<&RMCPPlusOpenSessionPayload> for Vec<u8> {
+//     fn from(val: &RMCPPlusOpenSessionPayload) -> Self {
+//         match val {
+//             RMCPPlusOpenSessionPayload::Request(request) => request.clone().into(),
+//             _ => todo!(),
+//         }
+//     }
+// }
 
 #[derive(Clone, Debug)]
 pub struct RMCPPlusOpenSessionRequest {
@@ -108,25 +117,25 @@ pub struct RMCPPlusOpenSessionRequest {
     pub confidentiality_algorithm: ConfidentialityAlgorithm,
 }
 
-impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
-    fn from(val: RMCPPlusOpenSessionRequest) -> Self {
-        let mut ret = [0_u8; 32];
-        ret[0] = val.message_tag;
-        ret[1] = val.max_privilege as u8;
-        ret[4..8].copy_from_slice(&u32::to_le_bytes(val.console_id)); // remote console session id
-        ret[8] = 0; // authentication payload type(0)
-        ret[11] = 8; // payload length
-        ret[12] = val.authentication_algorithm.into();
-        ret[16] = 1; // integrity payload type(1)
-        ret[19] = 8; // payload length
-        ret[20] = val.integrity_algorithm.into();
-        ret[24] = 2; // confidentiality payload type(2)
-        ret[27] = 8; // payload length
-        ret[28] = val.confidentiality_algorithm.into();
-
-        ret.into()
-    }
-}
+// impl From<RMCPPlusOpenSessionRequest> for Vec<u8> {
+//     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
+//         let mut ret = [0_u8; 32];
+//         ret[0] = val.message_tag;
+//         ret[1] = val.max_privilege as u8;
+//         ret[4..8].copy_from_slice(&u32::to_le_bytes(val.console_id)); // remote console session id
+//         ret[8] = 0; // authentication payload type(0)
+//         ret[11] = 8; // payload length
+//         ret[12] = val.authentication_algorithm.into();
+//         ret[16] = 1; // integrity payload type(1)
+//         ret[19] = 8; // payload length
+//         ret[20] = val.integrity_algorithm.into();
+//         ret[24] = 2; // confidentiality payload type(2)
+//         ret[27] = 8; // payload length
+//         ret[28] = val.confidentiality_algorithm.into();
+//
+//         ret.into()
+//     }
+// }
 
 impl<'a> From<RMCPPlusOpenSessionRequest> for Packet<'a> {
     fn from(val: RMCPPlusOpenSessionRequest) -> Self {
@@ -134,7 +143,7 @@ impl<'a> From<RMCPPlusOpenSessionRequest> for Packet<'a> {
             RmcpHeader::default(),
             IpmiSession::V2_0(IpmiV2Session::new_pre(
                 V2HeaderPayloadType::RmcpOpenSessionRequest,
-                32,
+                29,
             )),
             PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Request(val)),
         )
@@ -142,6 +151,24 @@ impl<'a> From<RMCPPlusOpenSessionRequest> for Packet<'a> {
 }
 
 impl RMCPPlusOpenSessionRequest {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        let mut write_bytes = 0;
+        buf[write_bytes] = self.message_tag;
+        buf[write_bytes + 1] = self.max_privilege as u8;
+        buf[write_bytes + 4..8].copy_from_slice(&u32::to_le_bytes(self.console_id)); // remote console session id
+        buf[write_bytes + 8] = 0; // authentication payload type(0)
+        buf[write_bytes + 11] = 8; // payload length
+        buf[write_bytes + 12] = self.authentication_algorithm.into();
+        buf[write_bytes + 16] = 1; // integrity payload type(1)
+        buf[write_bytes + 19] = 8; // payload length
+        buf[write_bytes + 20] = self.integrity_algorithm.into();
+        buf[write_bytes + 24] = 2; // confidentiality payload type(2)
+        buf[write_bytes + 27] = 8; // payload length
+        buf[write_bytes + 28] = self.confidentiality_algorithm.into();
+        write_bytes += 29;
+        write_bytes
+    }
+
     pub fn new(
         message_tag: u8,
         max_privilege: Privilege,

@@ -50,7 +50,7 @@ impl<'a> IpmiCommand for ActivatePayloadCommand<'a> {
             PacketPayload::IpmiReq(IpmiRequestPayload::new(
                 Self::NET_FN,
                 Self::COMMAND,
-                data_payload.to_vec(),
+                Some(&data_payload),
             ))
         };
         let p = if self.data.is_some() {

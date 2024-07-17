@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct IpmiRespPayload {
+pub struct IpmiRespPayload<'a> {
     pub rq_addr: Address,
     pub netfn_rqlun: NetfnLun,
     // checksum 1
@@ -12,14 +12,14 @@ pub struct IpmiRespPayload {
     pub rqseq_rslun: NetfnLun,
     pub command: CommandCode,
     pub completion_code: CompletionCode,
-    pub data: Vec<u8>,
+    pub data: Option<&'a [u8]>,
     // checksum 2
 }
 
-impl TryFrom<&[u8]> for IpmiRespPayload {
+impl<'a> TryFrom<&'a [u8]> for IpmiRespPayload<'a> {
     type Error = Error;
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         if value.len() < 8 {
             Err(EIpmiPayload::WrongLength)?
         }
@@ -35,9 +35,9 @@ impl TryFrom<&[u8]> for IpmiRespPayload {
             data: {
                 let len = value.len() - 1;
                 if len == 7 {
-                    Vec::new()
+                    None
                 } else {
-                    value[7..len].into()
+                    Some(&value[7..len])
                 }
             },
         };
@@ -46,12 +46,12 @@ impl TryFrom<&[u8]> for IpmiRespPayload {
     }
 }
 
-impl IpmiRespPayload {
+impl<'a> IpmiRespPayload<'a> {
     pub fn payload_length(&self) -> usize {
-        if self.data.is_empty() {
+        if self.data.is_none() {
             8
         } else {
-            self.data.len() + 8
+            self.data.unwrap().len() + 8
         }
     }
 }

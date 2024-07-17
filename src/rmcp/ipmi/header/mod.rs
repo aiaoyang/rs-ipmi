@@ -2,12 +2,12 @@ pub mod v1;
 pub mod v2;
 
 use crate::err::{EIpmiHeader, Error};
-use v1::IpmiV1Header;
+use v1::IpmiV1Session;
 use v2::{IpmiV2Session, V2HeaderPayloadType};
 
 #[derive(Clone, Copy, Debug)]
 pub enum IpmiSession {
-    V1_5(IpmiV1Header),
+    V1_5(IpmiV1Session),
     V2_0(IpmiV2Session),
 }
 

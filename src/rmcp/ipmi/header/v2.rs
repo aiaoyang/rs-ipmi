@@ -128,6 +128,9 @@ impl From<&IpmiV2Session> for Vec<u8> {
 }
 
 impl IpmiV2Session {
+    pub fn set_payload_length(&self, buf: &mut [u8], payload_length: u16) {
+        buf[0..2].copy_from_slice(&payload_length.to_le_bytes());
+    }
     pub fn write_to(self, buf: &mut [u8]) -> usize {
         match self.payload_type {
             V2HeaderPayloadType::Oem => {

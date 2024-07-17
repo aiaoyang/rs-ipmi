@@ -113,10 +113,11 @@ impl IpmiCommand for BootOpt {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
+        let d = &(<SetSystemBootOptions>::from(self));
         let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
             Self::NET_FN,
             Self::COMMAND,
-            <SetSystemBootOptions>::from(self).to_vec(),
+            Some(d),
         ));
         Packet::new_with_data(data).write_to(buf)
     }

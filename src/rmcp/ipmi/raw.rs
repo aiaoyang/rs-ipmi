@@ -1,13 +1,13 @@
 use crate::{IpmiSession, IpmiV2Session, Packet, RmcpHeader};
 #[derive(Clone, Debug)]
-pub struct IpmiRawRequest<'a>(&'a [u8]);
+pub struct IpmiRawRequest(&'static [u8]);
 
-impl<'a> IpmiRawRequest<'a> {
-    pub fn new(data: &'a [u8]) -> IpmiRawRequest {
+impl IpmiRawRequest {
+    pub fn new(data: &'static [u8]) -> IpmiRawRequest {
         IpmiRawRequest(data)
     }
 
-    pub fn create_packet(&'a self) -> Packet<'a> {
+    pub fn create_packet(&self) -> Packet {
         Packet::new_raw(
             RmcpHeader::default(),
             IpmiSession::V2_0(IpmiV2Session::new_est(32)),

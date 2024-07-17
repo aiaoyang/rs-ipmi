@@ -25,6 +25,16 @@ impl From<&RakpPayload> for Vec<u8> {
     }
 }
 
+impl RakpPayload {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        match self {
+            RakpPayload::Message1(payload) => payload.write_to(buf),
+            RakpPayload::Message3(payload) => payload.write_to(buf),
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RAKPMessage1 {
     pub message_tag: u8,
@@ -42,14 +52,6 @@ impl std::fmt::Display for RAKPMessage1 {
             "msg_tag: {}, mgr_id: {}, console_rnd_num: {}, privilege: {:?}",
             self.message_tag, self.managed_id, self.console_rnd_number, self.privilege_level
         ))
-    }
-}
-
-fn privilege(nameonly_lookup: bool, privilege: Privilege) -> u8 {
-    if !nameonly_lookup {
-        privilege as u8 | 0x10
-    } else {
-        privilege as u8
     }
 }
 
@@ -91,6 +93,30 @@ impl<'a> From<RAKPMessage1> for Packet<'a> {
 }
 
 impl RAKPMessage1 {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        // let mut write_bytes = RmcpHeader::default().write_to(buf);
+        // write_bytes += IpmiSession::V2_0(IpmiV2Session::new_pre(
+        //     V2HeaderPayloadType::RAKP1,
+        //     (self.username_length + 28).into(),
+        // ))
+        // .write_to(buf);
+
+        let username = if self.username_length > 16 {
+            &self.username.as_bytes()[..=16]
+        } else {
+            self.username.as_bytes()
+        };
+        buf[0] = self.message_tag;
+        buf[1..4].fill_with(|| 0); // reserved 0
+        buf[4..8].copy_from_slice(&u32::to_le_bytes(self.managed_id));
+        buf[8..24].copy_from_slice(&u128::to_le_bytes(self.console_rnd_number));
+        buf[24] = privilege(self.nameonly_lookup, self.privilege_level);
+        buf[25] = 0; // reserved 0
+        buf[26] = 0; // reserved 0
+        buf[27] = self.username_length;
+        buf[28..(28 + username.len())].copy_from_slice(username);
+        28 + username.len() + 1
+    }
     pub fn new(
         message_tag: u8,
         managed_system_session_id: u32,
@@ -224,6 +250,22 @@ impl<'a> From<RAKPMessage3> for Packet<'a> {
 }
 
 impl RAKPMessage3 {
+    pub fn write_to(self, buf: &mut [u8]) -> usize {
+        let len = if let Some(auth_code) = &self.key_exchange_auth_code {
+            buf[0..8].fill(0);
+            buf[8..8 + auth_code.len()].copy_from_slice(auth_code);
+            8 + auth_code.len()
+        } else {
+            buf[0..8].fill(0);
+            8
+        };
+        buf[0] = self.message_tag;
+        buf[1] = self.status_code.into();
+        // re[2] reserved
+        // re[3] reserved
+        buf[4..8].copy_from_slice(&self.managed_id.to_le_bytes());
+        len
+    }
     pub fn new(
         message_tag: u8,
         rmcp_plus_status_code: StatusCode,
@@ -278,5 +320,13 @@ impl TryFrom<&[u8]> for RAKPMessage4 {
                 }
             },
         })
+    }
+}
+
+fn privilege(nameonly_lookup: bool, privilege: Privilege) -> u8 {
+    if !nameonly_lookup {
+        privilege as u8 | 0x10
+    } else {
+        privilege as u8
     }
 }
