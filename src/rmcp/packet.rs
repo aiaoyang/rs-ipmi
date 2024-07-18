@@ -251,6 +251,7 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
             self.session_seq,
             0,
         );
+        let rmcp_header_tail_idx = n;
         n += session.write_to(&mut buf[n..]);
         let session_tail_idx = n;
         let mut payload_len = request.write_to(&mut buf[n..]);
@@ -262,7 +263,11 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
             payload_len as u16,
         );
         n += payload_len;
-        n += add_tailer(buf, n, k1);
+        n += add_tailer(
+            &mut buf[rmcp_header_tail_idx..],
+            n - rmcp_header_tail_idx,
+            k1,
+        );
         &buf[..n]
     }
 }

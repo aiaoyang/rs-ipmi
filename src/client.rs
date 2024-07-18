@@ -538,13 +538,15 @@ impl ActiveClient {
                     &self.session.k2[..16].try_into().unwrap(),
                     &self.session.k1,
                 );
-        let resp = send_recv(
+        let n = send_recv(
             &self.socket,
             packet,
             &mut self.recv_buf,
             Duration::from_secs(1),
         )
         .await?;
+        let resp_packet = Packet::decode_from(&mut self.recv_buf, &self.session.k2, n)?;
+        println!("resp: {resp_packet:?}");
 
         // self.buffer.1 = ipmi_cmd.write_to(&mut self.buffer.0);
         //
