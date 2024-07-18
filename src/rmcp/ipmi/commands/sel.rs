@@ -60,7 +60,6 @@ impl IpmiCommand for GetSelInfo {
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
         let n = IpmiRequestPayload::new(NetFn::Storage, CommandCode::Raw(0x40), None).write_to(buf);
-        println!("write: {:X?}", &buf[..n]);
         n
     }
 }

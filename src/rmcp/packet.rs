@@ -233,7 +233,7 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
     pub fn write_payload<'a, T>(
         self,
         buf: &'a mut [u8],
-        request: T,
+        request: &T,
         key: &[u8; 16],
         k1: &[u8; 20],
     ) -> &'a [u8]
@@ -255,9 +255,7 @@ impl PacketBuilder<IpmiV2Packet, PayloadTypeIpmiEncrypted> {
         n += session.write_to(&mut buf[n..]);
         let session_tail_idx = n;
         let mut payload_len = request.write_to(&mut buf[n..]);
-        println!("payload befor: {payload_len}");
         aes_128_cbc_encrypt(&mut buf[session_tail_idx..], &mut payload_len, key);
-        println!("payload after: {payload_len}");
         session.set_payload_length(
             &mut buf[session_tail_idx - 2..session_tail_idx],
             payload_len as u16,
@@ -443,6 +441,12 @@ pub enum PacketPayload<'a> {
 }
 
 impl<'a> PacketPayload<'a> {
+    pub fn data(&self) -> Option<&'a [u8]> {
+        match self {
+            PacketPayload::IpmiResp(resp) => resp.data,
+            _ => todo!(),
+        }
+    }
     pub fn write_to(self, buf: &mut [u8]) -> usize {
         match self {
             PacketPayload::IpmiResp(_) => unreachable!(),

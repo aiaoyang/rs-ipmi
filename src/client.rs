@@ -340,7 +340,6 @@ impl InActiveClient {
         let packet = PacketBuilder::rakp1().write_payload(&mut self.snd_buf, rk1);
 
         // RAKP Message 2
-        println!("send rakp1");
         let r2_pkt = Self::send_unauth_packet_retry(
             &socket,
             &mut self.session,
@@ -384,7 +383,6 @@ impl InActiveClient {
         let packet = PacketBuilder::rakp3().write_payload(&mut self.snd_buf, rakp3_packet);
 
         // RAKP Message 4
-        println!("send rakp3");
         let r4_pkt = Self::send_unauth_packet_retry(
             &socket,
             &mut self.session,
@@ -529,12 +527,15 @@ impl ActiveClient {
         self.socket.recv(buf).await
     }
 
-    pub async fn send_ipmi_cmd<CMD: IpmiCommand>(&mut self, ipmi_cmd: CMD) -> Result<CMD::Output> {
+    pub async fn send_ipmi_cmd<CMD: IpmiCommand<Output: Debug>>(
+        &mut self,
+        ipmi_cmd: CMD,
+    ) -> Result<CMD::Output> {
         let packet =
             PacketBuilder::ipmi_encrypted(self.session.managed_id, &mut self.session.seq_number)
                 .write_payload(
                     &mut self.snd_buf,
-                    ipmi_cmd,
+                    &ipmi_cmd,
                     &self.session.k2[..16].try_into().unwrap(),
                     &self.session.k1,
                 );
@@ -546,7 +547,11 @@ impl ActiveClient {
         )
         .await?;
         let resp_packet = Packet::decode_from(&mut self.recv_buf, &self.session.k2, n)?;
-        println!("resp: {resp_packet:?}");
+        ipmi_cmd.parse(resp_packet.data.data().unwrap())
+        // println!(
+        //     "resp: {resp_packet:?}, data: {:?}",
+        //     ipmi_cmd.parse(resp_packet.data.data().unwrap())?
+        // );
 
         // self.buffer.1 = ipmi_cmd.write_to(&mut self.buffer.0);
         //
@@ -585,7 +590,7 @@ impl ActiveClient {
         // };
         //
         // ipmi_cmd.parse(data)
-        todo!()
+        // todo!()
     }
 
     pub async fn send_and_decrypt_packet<'a>(

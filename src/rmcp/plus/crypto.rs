@@ -17,16 +17,13 @@ pub fn aes_128_cbc_encrypt(data: &mut [u8], len: &mut usize, key: &[u8; 16]) {
     let iv = generate_iv();
     type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
-    println!("iv: {:?}", &iv);
     padding_data(data, len, Aes128CbcEnc::block_size());
-    println!("padded len {}", *len);
     match Aes128CbcEnc::new(key.into(), &iv.into()).encrypt_padded_mut::<NoPadding>(data, *len) {
         Ok(v) => *len = v.len(),
         Err(e) => {
             panic!("payload: {:?}, err: {e:?}", &data[..*len]);
         }
     }
-    println!("encrypted len: {}", *len);
     let mut i = *len;
     while i != 0 {
         i -= 1;
