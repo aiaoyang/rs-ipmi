@@ -1,8 +1,7 @@
 use crate::{
     commands::{CommandCode, Privilege},
     err::{ECommand, Error},
-    rmcp::{IpmiSession, IpmiV2Session, Packet, PacketPayload, RmcpHeader, V2HeaderPayloadType},
-    ECommandCode, PacketBuilder,
+    ECommandCode,
 };
 
 #[derive(Clone, Debug)]
@@ -136,19 +135,6 @@ pub struct RMCPPlusOpenSessionRequest {
 //         ret.into()
 //     }
 // }
-
-impl<'a> From<RMCPPlusOpenSessionRequest> for Packet<'a> {
-    fn from(val: RMCPPlusOpenSessionRequest) -> Self {
-        Packet::new(
-            RmcpHeader::default(),
-            IpmiSession::V2_0(IpmiV2Session::new_pre(
-                V2HeaderPayloadType::RmcpOpenSessionRequest,
-                29,
-            )),
-            PacketPayload::Rmcp(RMCPPlusOpenSessionPayload::Request(val)),
-        )
-    }
-}
 
 impl RMCPPlusOpenSessionRequest {
     pub fn write_to(self, buf: &mut [u8]) -> usize {

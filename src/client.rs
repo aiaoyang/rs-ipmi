@@ -1,25 +1,20 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use log::{info, warn};
-use tokio::{
-    net::{ToSocketAddrs, UdpSocket},
-    time::timeout,
-};
+use tokio::net::{ToSocketAddrs, UdpSocket};
 
 use crate::{
-    commands::{CloseSessionCMD, GetChannelAuthCapabilitiesRequest, Privilege},
-    crypto::aes_128_cbc_encrypt_new,
+    commands::{GetChannelAuthCapabilitiesRequest, Privilege},
+    crypto::aes_128_cbc_encrypt,
     err::{EClient, Error},
-    raw::IpmiRawRequest,
     rmcp::{
-        crypto::{add_tailer, aes_128_cbc_encrypt, hash_hmac_sha1},
+        crypto::hash_hmac_sha1,
         open_session::{
             AuthAlgorithm, ConfidentialityAlgorithm, IntegrityAlgorithm,
             RMCPPlusOpenSessionPayload, RMCPPlusOpenSessionRequest, StatusCode,
         },
         rakp::{RAKPMessage1, RAKPMessage3, RakpPayload},
         response::IpmiRespPayload,
-        CompletionCode, Packet, PacketPayload,
+        Packet, PacketPayload,
     },
     IpmiCommand, PacketBuilder,
 };
@@ -744,7 +739,7 @@ pub async fn send_recv(
 }
 
 fn encrypt_packet(session: &SessionActived, data: (&mut [u8], &mut usize)) {
-    aes_128_cbc_encrypt_new(data.0, data.1, session.k2[..16].try_into().unwrap());
+    aes_128_cbc_encrypt(data.0, data.1, session.k2[..16].try_into().unwrap());
 
     // req_packet
     //     .ipmi_session

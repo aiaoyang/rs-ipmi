@@ -1,7 +1,7 @@
 use crate::commands::CommandCode;
 use crate::err::{ECommand, Error};
 use crate::request::IpmiRequestPayload;
-use crate::{ECommandCode, IpmiCommand, NetFn, Packet, PacketPayload};
+use crate::{ECommandCode, IpmiCommand, NetFn};
 pub struct GetSDRRepositoryInfo;
 
 #[derive(Debug)]
@@ -33,8 +33,6 @@ impl IpmiCommand for GetSDRRepositoryInfo {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let data =
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None));
-        Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None).write_to(buf)
     }
 }

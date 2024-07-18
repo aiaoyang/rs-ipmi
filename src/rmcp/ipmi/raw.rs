@@ -1,5 +1,3 @@
-use crate::{IpmiSession, IpmiV2Session, Packet, RmcpHeader};
-#[derive(Clone, Debug)]
 pub struct IpmiRawRequest(&'static [u8]);
 
 impl IpmiRawRequest {
@@ -7,20 +5,19 @@ impl IpmiRawRequest {
         IpmiRawRequest(data)
     }
 
-    pub fn create_packet(&self) -> Packet {
-        Packet::new_raw(
-            RmcpHeader::default(),
-            IpmiSession::V2_0(IpmiV2Session::new_est(32)),
-            self.0,
-        )
-    }
+    // pub fn create_packet(&self) -> Packet {
+    //     Packet::new_raw(
+    //         RmcpHeader::default(),
+    //         IpmiSession::V2_0(IpmiV2Session::new_est(32)),
+    //         self.0,
+    //     )
+    // }
 }
 
 #[cfg(test)]
 mod test {
     #[cfg(test)]
-    use crate::IPMIClient;
-    use crate::{commands::GetSelInfo, raw::IpmiRawRequest, request::checksum, IpmiCommand};
+    use crate::request::checksum;
 
     #[tokio::test]
     async fn gen_raw_command() {

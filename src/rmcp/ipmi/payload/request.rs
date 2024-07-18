@@ -12,7 +12,8 @@ pub struct IpmiRequestPayload<'a> {
     pub rq_addr: Address,
     pub rqseq_rqlun: NetfnLun,
     pub command: CommandCode,
-    pub data: &'a [u8], // checksum 2
+    pub data: &'a [u8],
+    // checksum 2
 }
 
 const BMC_SLAVE_ADDRESS: u8 = 0x20;
@@ -55,16 +56,6 @@ impl<'a> IpmiRequestPayload<'a> {
         buf[6 + data_len] = checksum(&buf[3..6 + data_len]);
         7 + data_len
     }
-    // pub fn new(net_fn: NetFn, command: CommandCode, data: Vec<u8>) -> Self {
-    //     Self {
-    //         rs_addr: Address::Slave(SlaveAddress::Bmc),
-    //         netfn_rslun: NetfnLun::new(net_fn, Lun::Bmc),
-    //         rq_addr: Address::Software(SoftwareType::RemoteConsoleSoftware(1)),
-    //         rqseq_rqlun: NetfnLun::new(0x08, Lun::Bmc),
-    //         command,
-    //         data,
-    //     }
-    // }
     pub fn new(net_fn: NetFn, command: CommandCode, data: Option<&'a [u8]>) -> Self {
         Self {
             rs_addr: Address::Slave(SlaveAddress::Bmc),

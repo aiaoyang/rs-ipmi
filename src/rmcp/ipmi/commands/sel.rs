@@ -6,7 +6,7 @@ use std::{
 use crate::{
     commands::CommandCode,
     err::{ECommand, Error},
-    rmcp::{request::IpmiRequestPayload, IpmiCommand, PacketPayload},
+    rmcp::{request::IpmiRequestPayload, IpmiCommand},
     ECommandCode, NetFn, SelEntry,
 };
 
@@ -59,7 +59,9 @@ impl IpmiCommand for GetSelInfo {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None).write_to(buf)
+        let n = IpmiRequestPayload::new(NetFn::Storage, CommandCode::Raw(0x40), None).write_to(buf);
+        println!("write: {:X?}", &buf[..n]);
+        n
     }
 }
 
@@ -114,13 +116,7 @@ impl IpmiCommand for GetSelEntry {
         data[4] = *offset;
         data[5] = bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        let data = crate::rmcp::PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(&data),
-        ));
-        data.write_to(buf)
-        // Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(&data)).write_to(buf)
     }
 }
 

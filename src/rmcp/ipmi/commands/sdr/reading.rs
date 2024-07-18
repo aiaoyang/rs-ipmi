@@ -2,7 +2,7 @@ use crate::commands::CommandCode;
 use crate::request::IpmiRequestPayload;
 use crate::storage::sdr::{Address, Channel, SensorKey};
 use crate::{storage::sdr::SensorNumber, IpmiCommand};
-use crate::{ECommand, Error, NetFn, Packet, PacketPayload};
+use crate::{ECommand, Error, NetFn};
 
 pub struct GetRawSensorReading {
     sensor_number: SensorNumber,
@@ -70,12 +70,7 @@ impl IpmiCommand for GetRawSensorReading {
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
         let d = &[self.sensor_number.get()];
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(d),
-        ));
-        Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(d)).write_to(buf)
     }
 }
 

@@ -27,7 +27,7 @@ impl From<u8> for EventType {
 impl EventType {
     pub fn description(
         &self,
-        sensor_type: impl Into<u8> + std::marker::Copy,
+        sensor_type: impl Into<u8> + core::marker::Copy,
         data: &[u8; 3],
     ) -> &(&'static str, EventDirection) {
         match self {
@@ -67,7 +67,7 @@ impl EventType {
 
     pub fn data_to_u32(
         &self,
-        sensor_type: impl Into<u8> + std::marker::Copy,
+        sensor_type: impl Into<u8> + core::marker::Copy,
         data: [u8; 3],
     ) -> u32 {
         match self {

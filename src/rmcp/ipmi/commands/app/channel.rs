@@ -131,12 +131,7 @@ impl IpmiCommand for GetChannelAuthCapabilitiesRequest {
             (self.channel_version as u8) << 7 | self.channel_number,
             self.max_privilege as u8,
         ];
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(&d),
-        ));
-        data.write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(&d)).write_to(buf)
     }
 }
 

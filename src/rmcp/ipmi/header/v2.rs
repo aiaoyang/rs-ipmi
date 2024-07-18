@@ -85,47 +85,47 @@ impl TryFrom<&[u8]> for IpmiV2Session {
     }
 }
 
-impl From<&IpmiV2Session> for Vec<u8> {
-    fn from(val: &IpmiV2Session) -> Self {
-        match val.payload_type {
-            V2HeaderPayloadType::Oem => {
-                let oem_iana_le = val.oem_iana.unwrap().to_le_bytes();
-                let oem_payload_id_le = val.oem_payload_id.unwrap().to_le_bytes();
-                let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
-                let ses_seq_le = val.session_seq_number.to_le_bytes();
-                let len_le = val.payload_length.to_le_bytes();
-
-                let mut result = Vec::new();
-                result.extend([val.auth_type.into(), {
-                    match (val.payload_enc, val.payload_auth) {
-                        (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(val.payload_type)),
-                        (true, false) => (0x1 << 7) | (u8::from(val.payload_type)),
-                        (false, true) => (0x1 << 6) | (u8::from(val.payload_type)),
-                        (false, false) => u8::from(val.payload_type),
-                    }
-                }]);
-                result.extend(oem_iana_le);
-                result.extend(oem_payload_id_le);
-                result.extend(rmcp_ses_le);
-                result.extend(ses_seq_le);
-                result.extend(len_le);
-                result
-            }
-            _ => {
-                let mut ret = [0_u8; 12];
-                ret[0] = val.auth_type.into();
-                ret[1] = (val.payload_enc as u8) << 7
-                    | (val.payload_auth as u8) << 6
-                    | (u8::from(val.payload_type));
-                ret[2..6].copy_from_slice(&val.rmcp_plus_session_id.to_le_bytes());
-                ret[6..10].copy_from_slice(&val.session_seq_number.to_le_bytes());
-                ret[10..].copy_from_slice(&val.payload_length.to_le_bytes());
-
-                ret.into()
-            }
-        }
-    }
-}
+// impl From<&IpmiV2Session> for Vec<u8> {
+//     fn from(val: &IpmiV2Session) -> Self {
+//         match val.payload_type {
+//             V2HeaderPayloadType::Oem => {
+//                 let oem_iana_le = val.oem_iana.unwrap().to_le_bytes();
+//                 let oem_payload_id_le = val.oem_payload_id.unwrap().to_le_bytes();
+//                 let rmcp_ses_le = val.rmcp_plus_session_id.to_le_bytes();
+//                 let ses_seq_le = val.session_seq_number.to_le_bytes();
+//                 let len_le = val.payload_length.to_le_bytes();
+//
+//                 let mut result = Vec::new();
+//                 result.extend([val.auth_type.into(), {
+//                     match (val.payload_enc, val.payload_auth) {
+//                         (true, true) => (0x1 << 7) | (0x1 << 6) | (u8::from(val.payload_type)),
+//                         (true, false) => (0x1 << 7) | (u8::from(val.payload_type)),
+//                         (false, true) => (0x1 << 6) | (u8::from(val.payload_type)),
+//                         (false, false) => u8::from(val.payload_type),
+//                     }
+//                 }]);
+//                 result.extend(oem_iana_le);
+//                 result.extend(oem_payload_id_le);
+//                 result.extend(rmcp_ses_le);
+//                 result.extend(ses_seq_le);
+//                 result.extend(len_le);
+//                 result
+//             }
+//             _ => {
+//                 let mut ret = [0_u8; 12];
+//                 ret[0] = val.auth_type.into();
+//                 ret[1] = (val.payload_enc as u8) << 7
+//                     | (val.payload_auth as u8) << 6
+//                     | (u8::from(val.payload_type));
+//                 ret[2..6].copy_from_slice(&val.rmcp_plus_session_id.to_le_bytes());
+//                 ret[6..10].copy_from_slice(&val.session_seq_number.to_le_bytes());
+//                 ret[10..].copy_from_slice(&val.payload_length.to_le_bytes());
+//
+//                 ret.into()
+//             }
+//         }
+//     }
+// }
 
 impl IpmiV2Session {
     pub fn set_payload_length(&self, buf: &mut [u8], payload_length: u16) {
@@ -168,17 +168,17 @@ impl IpmiV2Session {
             }
         }
     }
-    pub fn new_est(payload_length: u16) -> IpmiV2Session {
-        Self::new(
-            AuthType::RmcpPlus,
-            true,
-            true,
-            V2HeaderPayloadType::Ipmi,
-            0,
-            0,
-            payload_length,
-        )
-    }
+    // pub fn new_est(payload_length: u16) -> IpmiV2Session {
+    //     Self::new(
+    //         AuthType::RmcpPlus,
+    //         true,
+    //         true,
+    //         V2HeaderPayloadType::Ipmi,
+    //         0,
+    //         0,
+    //         payload_length,
+    //     )
+    // }
     pub fn new_pre(payload_type: V2HeaderPayloadType, payload_length: u16) -> Self {
         Self::new(
             AuthType::RmcpPlus,
@@ -191,28 +191,28 @@ impl IpmiV2Session {
         )
     }
 
-    pub fn new_sol_activate(payload_length: u16) -> Self {
-        Self::new(
-            AuthType::RmcpPlus,
-            true,
-            true,
-            V2HeaderPayloadType::Ipmi,
-            0x0,
-            0x0,
-            payload_length,
-        )
-    }
-    pub fn new_sol_payload(payload_length: u16) -> Self {
-        Self::new(
-            AuthType::RmcpPlus,
-            true,
-            true,
-            V2HeaderPayloadType::Sol,
-            0x0,
-            0x0,
-            payload_length,
-        )
-    }
+    // pub fn new_sol_activate(payload_length: u16) -> Self {
+    //     Self::new(
+    //         AuthType::RmcpPlus,
+    //         true,
+    //         true,
+    //         V2HeaderPayloadType::Ipmi,
+    //         0x0,
+    //         0x0,
+    //         payload_length,
+    //     )
+    // }
+    // pub fn new_sol_payload(payload_length: u16) -> Self {
+    //     Self::new(
+    //         AuthType::RmcpPlus,
+    //         true,
+    //         true,
+    //         V2HeaderPayloadType::Sol,
+    //         0x0,
+    //         0x0,
+    //         payload_length,
+    //     )
+    // }
     pub fn new(
         auth_type: AuthType,
         payload_enc: bool,

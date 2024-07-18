@@ -1,9 +1,7 @@
 pub mod boot_opt;
 pub mod control;
 
-use crate::{
-    request::IpmiRequestPayload, ECommand, ECommandCode, IpmiCommand, Packet, PacketPayload,
-};
+use crate::{request::IpmiRequestPayload, ECommand, ECommandCode, IpmiCommand};
 
 pub struct GetChassisStatus;
 
@@ -66,9 +64,8 @@ impl IpmiCommand for GetChassisStatus {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let data =
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None));
-        Packet::new_with_data(data).write_to(buf)
+        let data = IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None);
+        data.write_to(buf)
     }
 }
 
@@ -91,11 +88,6 @@ impl IpmiCommand for ChassisControl {
     }
     fn write_to(&self, buf: &mut [u8]) -> usize {
         let d = &[*self as u8];
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(d),
-        ));
-        Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(d)).write_to(buf)
     }
 }

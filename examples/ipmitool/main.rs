@@ -73,17 +73,17 @@ async fn main() -> Result<(), std::io::Error> {
     // msg[i++] |= payload->payload.sol_packet.flush_outbound ? 0x01 : 0;
 
     let data = &[b'l', b's'];
-    let mut packet = Packet::new_sol_packet(data);
-    let resp = client.send_and_decrypt_packet(&mut packet).await;
-    match resp {
-        Ok(packet) => {
-            if let rust_ipmi::PacketPayload::Sol(sol) = packet.data {
-                println!("resp ==>{:?}", String::from_utf8_lossy(&sol.data));
-            };
-        }
-        Err(e) => println!("ERROR: {e:#?}"),
-    }
-    client.loop_sol_data().await.unwrap();
+    // let mut packet = Packet::new_sol_packet(data);
+    // let resp = client.send_and_decrypt_packet(&mut packet).await;
+    // match resp {
+    //     Ok(packet) => {
+    //         if let rust_ipmi::PacketPayload::Sol(sol) = packet.data {
+    //             println!("resp ==>{:?}", String::from_utf8_lossy(&sol.data));
+    //         };
+    //     }
+    //     Err(e) => println!("ERROR: {e:#?}"),
+    // }
+    // client.loop_sol_data().await.unwrap();
     // client.loop_sol_data().await.unwrap();
     Ok(())
 }

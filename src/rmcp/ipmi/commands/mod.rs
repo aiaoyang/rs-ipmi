@@ -11,12 +11,7 @@ mod sdr;
 mod sel;
 
 use crate::NetFn;
-use crate::Packet;
-use crate::{
-    err::Error,
-    rmcp::{request::IpmiRequestPayload, PacketPayload},
-    IpmiCommand,
-};
+use crate::{err::Error, rmcp::request::IpmiRequestPayload, IpmiCommand};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandCode {
@@ -86,12 +81,6 @@ impl IpmiCommand for CloseSessionCMD {
             (self.0 >> 16) as u8,
             (self.0 >> 24) as u8,
         ];
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(d),
-        ));
-
-        Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(d)).write_to(buf)
     }
 }

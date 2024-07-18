@@ -1,4 +1,4 @@
-use std::num::NonZeroU8;
+use core::num::NonZeroU8;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Address(pub u8);

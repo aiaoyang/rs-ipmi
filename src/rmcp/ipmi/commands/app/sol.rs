@@ -43,33 +43,34 @@ impl<'a> IpmiCommand for ActivatePayloadCommand<'a> {
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
         // let data_payload = [0x01, 0x01, 0x08, 0, 0, 0];
-        let data_payload = [0x01, 0x01, 0x80 | 0x40 | 0x04 | 0x02, 0, 0, 0];
-        let packet_data = if let Some(data) = self.data {
-            PacketPayload::Sol(SolPayload::new(data.to_vec()))
-        } else {
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(
-                Self::NET_FN,
-                Self::COMMAND,
-                Some(&data_payload),
-            ))
-        };
-        let p = if self.data.is_some() {
-            crate::Packet::new(
-                crate::RmcpHeader::default(),
-                crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_payload(
-                    data_payload.len() as u16
-                )),
-                packet_data,
-            )
-        } else {
-            crate::Packet::new(
-                crate::RmcpHeader::default(),
-                crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_activate(
-                    data_payload.len() as u16,
-                )),
-                packet_data,
-            )
-        };
-        p.write_to(buf)
+        // let data_payload = [0x01, 0x01, 0x80 | 0x40 | 0x04 | 0x02, 0, 0, 0];
+        // let packet_data = if let Some(data) = self.data {
+        //     PacketPayload::Sol(SolPayload::new(data.to_vec()))
+        // } else {
+        //     PacketPayload::IpmiReq(IpmiRequestPayload::new(
+        //         Self::NET_FN,
+        //         Self::COMMAND,
+        //         Some(&data_payload),
+        //     ))
+        // };
+        // let p = if self.data.is_some() {
+        //     crate::Packet::new(
+        //         crate::RmcpHeader::default(),
+        //         crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_payload(
+        //             data_payload.len() as u16
+        //         )),
+        //         packet_data,
+        //     )
+        // } else {
+        //     crate::Packet::new(
+        //         crate::RmcpHeader::default(),
+        //         crate::IpmiSession::V2_0(crate::IpmiV2Session::new_sol_activate(
+        //             data_payload.len() as u16,
+        //         )),
+        //         packet_data,
+        //     )
+        // };
+        // p.write_to(buf)
+        todo!()
     }
 }

@@ -2,7 +2,7 @@ use std::num::NonZeroU16;
 
 use crate::{
     commands::CommandCode, request::IpmiRequestPayload, ECommand, ECommandCode, Error, IpmiCommand,
-    NetFn, PacketPayload,
+    NetFn,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -49,8 +49,6 @@ impl IpmiCommand for GetAllocInfo {
     }
 
     fn write_to(&self, buf: &mut [u8]) -> usize {
-        let data =
-            PacketPayload::IpmiReq(IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None));
-        data.write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, None).write_to(buf)
     }
 }

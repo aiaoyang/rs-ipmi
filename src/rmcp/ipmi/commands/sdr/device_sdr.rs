@@ -6,7 +6,7 @@ use crate::{
     commands::CommandCode,
     request::IpmiRequestPayload,
     storage::sdr::{RecordId, SdrRecord},
-    ECommand, ECommandCode, Error, IpmiCommand, NetFn, Packet, PacketPayload,
+    ECommand, ECommandCode, Error, IpmiCommand, NetFn,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -62,12 +62,7 @@ impl IpmiCommand for GetDeviceSdr {
         data[4] = self.offset;
         data[5] = self.bytes_to_read.map(|v| v.get()).unwrap_or(0xFF);
 
-        let data = PacketPayload::IpmiReq(IpmiRequestPayload::new(
-            Self::NET_FN,
-            Self::COMMAND,
-            Some(&data),
-        ));
-        Packet::new_with_data(data).write_to(buf)
+        IpmiRequestPayload::new(Self::NET_FN, Self::COMMAND, Some(&data)).write_to(buf)
     }
 }
 

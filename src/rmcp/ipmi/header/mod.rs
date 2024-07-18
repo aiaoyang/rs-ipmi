@@ -24,15 +24,6 @@ impl TryFrom<&[u8]> for IpmiSession {
     }
 }
 
-impl From<&IpmiSession> for Vec<u8> {
-    fn from(val: &IpmiSession) -> Self {
-        match val {
-            IpmiSession::V1_5(header) => header.into(),
-            IpmiSession::V2_0(header) => header.into(),
-        }
-    }
-}
-
 impl IpmiSession {
     pub fn write_to(self, buf: &mut [u8]) -> usize {
         match self {
